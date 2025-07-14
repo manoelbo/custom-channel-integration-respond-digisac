@@ -4,7 +4,8 @@
   "description": "A Middle Server application with several APIs.",
   "main": "server.js",
   "scripts": {
-    "start": "nodemon server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "author": "respond.io",
   "license": "ISC",
