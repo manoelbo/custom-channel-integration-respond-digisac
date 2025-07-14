@@ -1,0 +1,264 @@
+/* eslint-disable new-cap */
+const express = require('express');
+const axios = require('axios');
+
+/**
+ * DigiSac: API brasileira de mensageria WhatsApp
+ * Documentação: https://documenter.getpostman.com/view/24605757/2sA3BhfaDg
+ */
+const {
+  DigiSacMessage,
+  DigiSacMessageCollection,
+  digiSacApi,
+  formatBrazilianPhoneNumber,
+  isValidBrazilianPhone,
+} = require('./api.js');
+
+/**
+ * Respond.io custom channel API Token
+ * Obtenha seu token em: https://docs.respond.io/messaging-channels/custom-channel
+ */
+const CHANNEL_API_TOKEN = process.env.RESPOND_IO_TOKEN || '<API Token>';
+
+const router = express.Router();
+
+/**
+ * Rota para envio de mensagens: FROM respond.io TO DigiSac
+ * Endpoint: POST /message
+ */
+router.post('/message', async (req, res) => {
+  try {
+    /**
+     * Autenticação
+     * Verificar o bearer token do cabeçalho da requisição
+     * Comparar com o token da API do respond.io
+     */
+    const bearerToken = req.headers.authorization;
+    if (
+      !bearerToken ||
+      bearerToken.substring(7, bearerToken.length) !== CHANNEL_API_TOKEN
+    ) {
+      return res.status(401).json({
+        error: {
+          message: '401: UNAUTHORIZED - Token inválido',
+        },
+      });
+    }
+
+    // Extrair dados da requisição do respond.io
+    const phoneNumber = req.body.contactId;
+    const messageText = req.body.message.text;
+
+    // Validar número de telefone brasileiro
+    if (!phoneNumber || !isValidBrazilianPhone(phoneNumber)) {
+      return res.status(400).json({
+        error: {
+          message: 'Número de telefone brasileiro inválido',
+        },
+      });
+    }
+
+    // Validar mensagem
+    if (!messageText || messageText.trim() === '') {
+      return res.status(400).json({
+        error: {
+          message: 'Texto da mensagem é obrigatório',
+        },
+      });
+    }
+
+    // Criar mensagem DigiSac
+    const digiSacMessage = new DigiSacMessage();
+    digiSacMessage.to = formatBrazilianPhoneNumber(phoneNumber);
+    digiSacMessage.type = 'text';
+    digiSacMessage.text = messageText;
+
+    console.log('📤 Enviando mensagem para DigiSac:', {
+      to: digiSacMessage.to,
+      text: digiSacMessage.text,
+    });
+
+    // Enviar mensagem via DigiSac
+    const result = await digiSacApi.sendMessage(digiSacMessage);
+
+    if (result.success) {
+      // Sucesso - retornar ID da mensagem para o respond.io
+      res.json({
+        mId: result.data.message_id,
+      });
+    } else {
+      // Erro - retornar erro detalhado
+      const statusCode = result.error.code === 401 ? 401 : 400;
+      res.status(statusCode).json({
+        error: {
+          message: result.error.message,
+          details: result.error.details,
+        },
+      });
+    }
+  } catch (error) {
+    console.error('❌ Erro no endpoint /message:', error);
+    res.status(500).json({
+      error: {
+        message: 'Erro interno do servidor',
+        details: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Rota para recebimento de mensagens: FROM DigiSac TO respond.io
+ * Endpoint: POST /digisac/webhook
+ */
+router.post('/digisac/webhook', async (req, res) => {
+  try {
+    console.log('📥 Webhook recebido do DigiSac:', req.body);
+
+    /**
+     * Estrutura típica de webhook DigiSac:
+     * {
+     *   "id": "message_id",
+     *   "from": "5511999999999",
+     *   "to": "5511888888888",
+     *   "type": "text",
+     *   "text": {
+     *     "body": "Mensagem do usuário"
+     *   },
+     *   "timestamp": "1640995200",
+     *   "status": "received"
+     * }
+     */
+
+    // Extrair dados da mensagem recebida
+    const messageId = req.body.id || req.body.message_id;
+    const from = req.body.from;
+    const messageBody =
+      req.body.text?.body || req.body.body || req.body.message;
+    const timestamp = req.body.timestamp
+      ? parseInt(req.body.timestamp) * 1000
+      : Date.now();
+
+    // Validar dados essenciais
+    if (!messageId || !from || !messageBody) {
+      console.error('❌ Webhook DigiSac: dados incompletos', req.body);
+      return res.status(400).json({
+        error: 'Dados incompletos no webhook',
+      });
+    }
+
+    // Preparar dados para envio ao respond.io
+    const webhookData = {
+      channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
+      contactId: from,
+      events: [
+        {
+          type: 'message',
+          mId: messageId,
+          timestamp: timestamp,
+          message: {
+            type: 'text',
+            text: messageBody,
+          },
+        },
+      ],
+    };
+
+    console.log('📤 Enviando para respond.io:', webhookData);
+
+    // Enviar para o webhook do respond.io
+    const respondIoResponse = await axios({
+      method: 'post',
+      url: 'https://app.respond.io/custom/webhook',
+      headers: {
+        authorization: `Bearer ${CHANNEL_API_TOKEN}`,
+        'content-type': 'application/json',
+        'cache-control': 'no-cache',
+      },
+      data: webhookData,
+    });
+
+    console.log(
+      '✅ Mensagem enviada para respond.io:',
+      respondIoResponse.status
+    );
+
+    // Responder ao DigiSac que recebemos o webhook
+    res.status(200).json({
+      status: 'success',
+      message: 'Webhook processado com sucesso',
+    });
+  } catch (error) {
+    console.error('❌ Erro no webhook DigiSac:', error);
+
+    // Mesmo com erro, responder 200 ao DigiSac para evitar reenvios
+    res.status(200).json({
+      status: 'error',
+      message: 'Erro ao processar webhook',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * Rota para verificação de status da mensagem
+ * Endpoint: GET /message/:messageId/status
+ */
+router.get('/message/:messageId/status', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+
+    // Verificar autenticação
+    const bearerToken = req.headers.authorization;
+    if (
+      !bearerToken ||
+      bearerToken.substring(7, bearerToken.length) !== CHANNEL_API_TOKEN
+    ) {
+      return res.status(401).json({
+        error: {
+          message: '401: UNAUTHORIZED',
+        },
+      });
+    }
+
+    // Consultar status na API DigiSac
+    const result = await digiSacApi.getMessageStatus(messageId);
+
+    if (result.success) {
+      res.json({
+        messageId: messageId,
+        status: result.data.status,
+        timestamp: result.data.timestamp,
+      });
+    } else {
+      res.status(404).json({
+        error: {
+          message: 'Mensagem não encontrada',
+          details: result.error.message,
+        },
+      });
+    }
+  } catch (error) {
+    console.error('❌ Erro ao verificar status:', error);
+    res.status(500).json({
+      error: {
+        message: 'Erro interno do servidor',
+      },
+    });
+  }
+});
+
+/**
+ * Rota de health check
+ * Endpoint: GET /health
+ */
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'DigiSac ↔ Respond.io Bridge',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+  });
+});
+
+module.exports = router;
