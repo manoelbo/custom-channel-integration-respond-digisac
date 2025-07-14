@@ -22,6 +22,8 @@ A integração permite que você use o DigiSac como um "canal customizado" dentr
 - Conta no [respond.io](https://respond.io) com token da API
 - Conta no [DigiSac](https://sac.digital) com token da API
 
+
+
 ## 🚀 Configuração
 
 ### 1. Obter Token do Custom Channel
