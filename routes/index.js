@@ -113,7 +113,7 @@ router.post('/message', async (req, res) => {
  */
 router.post('/digisac/webhook', async (req, res) => {
   try {
-    console.log('📥 Webhook recebido do DigiSac:', req.body);
+    // console.log('📥 Webhook recebido do DigiSac:', req.body); // Log removido para limpar console
 
     // Verificar se é um evento de mensagem relevante
     const eventType = req.body.event;
