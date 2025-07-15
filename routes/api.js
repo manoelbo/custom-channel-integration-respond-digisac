@@ -21,6 +21,8 @@ class DigiSacMessage {
     this.type = 'text'; // Tipo da mensagem (text, image, document, etc.)
     this.text = ''; // Texto da mensagem
     this.media = null; // Mídia (opcional)
+    this.service_id = '6e9aab4c-94fd-47e0-99f2-06ae04caaa0c';
+    this.user_id = 'c3c4de37-afc8-4be0-96a8-4f1f606eeea3';
   }
 }
 
