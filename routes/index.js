@@ -46,8 +46,19 @@ router.post('/message', async (req, res) => {
     }
 
     // Extrair dados da requisição do respond.io
-    const phoneNumber = req.body.contactId;
-    const messageText = req.body.message.text;
+    // Suporta múltiplas estruturas conforme documentação
+    const phoneNumber = req.body.contactId || req.body.number;
+    const messageText = req.body.text || req.body.message?.text;
+
+    // Log para debug
+    console.log('📥 Dados recebidos do respond.io:', {
+      contactId: req.body.contactId,
+      number: req.body.number,
+      text: req.body.text,
+      message: req.body.message,
+      phoneNumber,
+      messageText,
+    });
 
     // Validar número de telefone brasileiro
     if (!phoneNumber || !isValidBrazilianPhone(phoneNumber)) {
