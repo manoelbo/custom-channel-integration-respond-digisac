@@ -26,96 +26,121 @@ const router = express.Router();
  * Rota para envio de mensagens: FROM respond.io TO DigiSac
  * Endpoint: POST /message
  */
-router.post('/message', async (req, res) => {
-  try {
-    /**
-     * Autenticação
-     * Verificar o bearer token do cabeçalho da requisição
-     * Comparar com o token da API do respond.io
-     */
-    const bearerToken = req.headers.authorization;
-    if (
-      !bearerToken ||
-      bearerToken.substring(7, bearerToken.length) !== CHANNEL_API_TOKEN
-    ) {
-      return res.status(401).json({
-        error: {
-          message: '401: UNAUTHORIZED - Token inválido',
-        },
-      });
-    }
+router.post('/message', (req, res) => {
+  console.log('🚀 Endpoint /message chamado');
+  console.log('📋 Headers recebidos:', req.headers);
+  console.log('📦 Body recebido:', JSON.stringify(req.body, null, 2));
 
-    // Extrair dados da requisição do respond.io
-    // Suporta múltiplas estruturas conforme documentação
-    const phoneNumber = req.body.contactId || req.body.number;
-    const messageText = req.body.text || req.body.message?.text;
+  /**
+   * Autenticação
+   * Verificar o bearer token do cabeçalho da requisição
+   * Comparar com o token da API do respond.io
+   */
+  const bearerToken = req.headers.authorization;
+  console.log('🔑 Bearer token recebido:', bearerToken);
+  console.log('🔑 CHANNEL_API_TOKEN configurado:', CHANNEL_API_TOKEN);
 
-    // Log para debug
-    console.log('📥 Dados recebidos do respond.io:', {
-      contactId: req.body.contactId,
-      number: req.body.number,
-      text: req.body.text,
-      message: req.body.message,
-      phoneNumber,
-      messageText,
-    });
-
-    // Validar número de telefone brasileiro
-    if (!phoneNumber || !isValidBrazilianPhone(phoneNumber)) {
-      return res.status(400).json({
-        error: {
-          message: 'Número de telefone brasileiro inválido',
-        },
-      });
-    }
-
-    // Validar mensagem
-    if (!messageText || messageText.trim() === '') {
-      return res.status(400).json({
-        error: {
-          message: 'Texto da mensagem é obrigatório',
-        },
-      });
-    }
-
-    // Criar mensagem DigiSac
-    const digiSacMessage = new DigiSacMessage();
-    digiSacMessage.to = formatBrazilianPhoneNumber(phoneNumber);
-    digiSacMessage.type = 'text';
-    digiSacMessage.text = messageText;
-
-    console.log('📤 Enviando mensagem para DigiSac:', {
-      to: digiSacMessage.to,
-      text: digiSacMessage.text,
-    });
-
-    // Enviar mensagem via DigiSac
-    const result = await digiSacApi.sendMessage(digiSacMessage);
-
-    if (result.success) {
-      // Sucesso - retornar ID da mensagem para o respond.io
-      res.json({
-        mId: result.data.message_id,
-      });
-    } else {
-      // Erro - retornar erro detalhado
-      const statusCode = result.error.code === 401 ? 401 : 400;
-      res.status(statusCode).json({
-        error: {
-          message: result.error.message,
-          details: result.error.details,
-        },
-      });
-    }
-  } catch (error) {
-    console.error('❌ Erro no endpoint /message:', error);
-    res.status(500).json({
+  if (!bearerToken) {
+    console.log('❌ Erro: Bearer token não encontrado');
+    return res.status(401).json({
       error: {
-        message: 'Erro interno do servidor',
-        details: error.message,
+        message: '401: UNAUTHORIZED - Bearer token não encontrado',
       },
     });
   }
+
+  const token = bearerToken.substring(7, bearerToken.length);
+  console.log('🔑 Token extraído:', token);
+  console.log('🔑 Token esperado:', CHANNEL_API_TOKEN);
+  console.log('🔑 Tokens são iguais?', token === CHANNEL_API_TOKEN);
+
+  if (token !== CHANNEL_API_TOKEN) {
+    console.log('❌ Erro: Token inválido');
+    return res.status(401).json({
+      error: {
+        message: '401: UNAUTHORIZED - Token inválido',
+      },
+    });
+  }
+
+  console.log('✅ Autenticação bem-sucedida');
+
+  // Extrair dados da requisição do respond.io
+  const phoneNumber = req.body.contactId || req.body.number;
+  const messageText = req.body.text || req.body.message?.text;
+
+  console.log('📱 Número de telefone extraído:', phoneNumber);
+  console.log('💬 Texto da mensagem extraído:', messageText);
+
+  // Validar número de telefone brasileiro
+  if (!phoneNumber || !isValidBrazilianPhone(phoneNumber)) {
+    console.log('❌ Erro: Número de telefone inválido:', phoneNumber);
+    return res.status(400).json({
+      error: {
+        message: 'Número de telefone brasileiro inválido',
+      },
+    });
+  }
+
+  // Validar mensagem
+  if (!messageText || messageText.trim() === '') {
+    console.log('❌ Erro: Texto da mensagem vazio');
+    return res.status(400).json({
+      error: {
+        message: 'Texto da mensagem é obrigatório',
+      },
+    });
+  }
+
+  console.log('✅ Validações passaram');
+
+  // Criar mensagem DigiSac
+  const digiSacMessage = new DigiSacMessage();
+  digiSacMessage.to = formatBrazilianPhoneNumber(phoneNumber);
+  digiSacMessage.type = 'text';
+  digiSacMessage.text = messageText;
+
+  console.log('📤 Enviando mensagem para DigiSac:', {
+    to: digiSacMessage.to,
+    text: digiSacMessage.text,
+  });
+
+  // Enviar mensagem via DigiSac
+  digiSacApi
+    .sendMessage(digiSacMessage)
+    .then((result) => {
+      console.log('📤 Resultado do DigiSac:', result);
+
+      if (result.success) {
+        // Sucesso - retornar ID da mensagem para o respond.io
+        console.log(
+          '✅ Mensagem enviada com sucesso, mId:',
+          result.data.message_id
+        );
+        res.json({
+          mId: result.data.message_id,
+        });
+      } else {
+        // Erro - retornar erro detalhado
+        console.log('❌ Erro do DigiSac:', result.error);
+        const statusCode = result.error.code === 401 ? 401 : 400;
+        res.status(statusCode).json({
+          error: {
+            message: result.error.message,
+            details: result.error.details,
+          },
+        });
+      }
+    })
+    .catch((error) => {
+      console.error('❌ Erro no endpoint /message:', error);
+      res.status(500).json({
+        error: {
+          message: 'Erro interno do servidor',
+          details: error.message,
+        },
+      });
+    });
 });
 
 /**
