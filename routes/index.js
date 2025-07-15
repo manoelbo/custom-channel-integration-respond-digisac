@@ -202,41 +202,44 @@ router.post('/digisac/webhook', async (req, res) => {
 
     // Extrair conteúdo baseado no tipo com mais opções
     let messageBody = '';
-    switch (messageType) {
-      case 'text':
-        messageBody =
-          messageData.text?.body ||
-          messageData.body ||
-          messageData.message ||
-          messageData.content ||
-          messageData.text;
-        break;
-      case 'document':
-        messageBody = `📄 Documento: ${
-          messageData.document?.filename || messageData.filename || 'arquivo'
-        }`;
-        break;
-      case 'ptt':
-      case 'audio':
-        messageBody = '🎵 Mensagem de áudio';
-        break;
-      case 'image':
-        messageBody = '🖼️ Imagem';
-        break;
-      case 'video':
-        messageBody = '🎥 Vídeo';
-        break;
-      case 'location':
-        messageBody = '📍 Localização';
-        break;
-      case 'contact':
-        messageBody = '👤 Contato';
-        break;
-      case 'sticker':
-        messageBody = '😀 Sticker';
-        break;
-      default:
-        messageBody = `📎 Mídia (${messageType})`;
+
+    // Para mensagens do tipo 'chat', o texto está diretamente no campo 'text'
+    if (messageType === 'chat' || messageType === 'text') {
+      messageBody =
+        messageData.text ||
+        messageData.body ||
+        messageData.message ||
+        messageData.content ||
+        '';
+    } else {
+      switch (messageType) {
+        case 'document':
+          messageBody = `📄 Documento: ${
+            messageData.document?.filename || messageData.filename || 'arquivo'
+          }`;
+          break;
+        case 'ptt':
+        case 'audio':
+          messageBody = '🎵 Mensagem de áudio';
+          break;
+        case 'image':
+          messageBody = '🖼️ Imagem';
+          break;
+        case 'video':
+          messageBody = '🎥 Vídeo';
+          break;
+        case 'location':
+          messageBody = '📍 Localização';
+          break;
+        case 'contact':
+          messageBody = '👤 Contato';
+          break;
+        case 'sticker':
+          messageBody = '😀 Sticker';
+          break;
+        default:
+          messageBody = `📎 Mídia (${messageType})`;
+      }
     }
 
     console.log('🔍 Message Body extraído:', messageBody);
