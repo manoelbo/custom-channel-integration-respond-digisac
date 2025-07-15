@@ -149,11 +149,17 @@ router.post('/message', (req, res) => {
  */
 router.post('/digisac/webhook', async (req, res) => {
   try {
-    // console.log('📥 Webhook recebido do DigiSac:', req.body); // Log removido para limpar console
+    // Log detalhado da estrutura completa do webhook
+    console.log('📥 Webhook DigiSac recebido - Estrutura completa:');
+    console.log('📋 Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('📦 Body completo:', JSON.stringify(req.body, null, 2));
 
     // Verificar se é um evento de mensagem relevante
     const eventType = req.body.event;
     const messageData = req.body.data;
+
+    console.log('🔍 Event Type:', eventType);
+    console.log('🔍 Message Data:', JSON.stringify(messageData, null, 2));
 
     // Só processar mensagens novas ou atualizadas que não são nossas
     if (!eventType || !messageData) {
@@ -173,35 +179,67 @@ router.post('/digisac/webhook', async (req, res) => {
       return res.status(200).json({ status: 'ignored' });
     }
 
-    // Extrair dados da mensagem recebida
-    const messageId = messageData.id;
-    const from = messageData.from || messageData.fromId;
-    const messageType = messageData.type;
+    // Extrair dados da mensagem recebida com mais flexibilidade
+    const messageId =
+      messageData.id || messageData.messageId || messageData._id;
+    const from =
+      messageData.from ||
+      messageData.fromId ||
+      messageData.contactId ||
+      messageData.number;
+    const messageType = messageData.type || messageData.messageType || 'text';
     const timestamp = messageData.timestamp
       ? new Date(messageData.timestamp).getTime()
       : Date.now();
 
-    // Extrair conteúdo baseado no tipo
+    console.log('🔍 Dados extraídos:', {
+      messageId,
+      from,
+      messageType,
+      eventType,
+      timestamp,
+    });
+
+    // Extrair conteúdo baseado no tipo com mais opções
     let messageBody = '';
     switch (messageType) {
       case 'text':
         messageBody =
-          messageData.text?.body || messageData.body || messageData.message;
+          messageData.text?.body ||
+          messageData.body ||
+          messageData.message ||
+          messageData.content ||
+          messageData.text;
         break;
       case 'document':
         messageBody = `📄 Documento: ${
-          messageData.document?.filename || 'arquivo'
+          messageData.document?.filename || messageData.filename || 'arquivo'
         }`;
         break;
       case 'ptt':
+      case 'audio':
         messageBody = '🎵 Mensagem de áudio';
         break;
       case 'image':
         messageBody = '🖼️ Imagem';
         break;
+      case 'video':
+        messageBody = '🎥 Vídeo';
+        break;
+      case 'location':
+        messageBody = '📍 Localização';
+        break;
+      case 'contact':
+        messageBody = '👤 Contato';
+        break;
+      case 'sticker':
+        messageBody = '😀 Sticker';
+        break;
       default:
         messageBody = `📎 Mídia (${messageType})`;
     }
+
+    console.log('🔍 Message Body extraído:', messageBody);
 
     // Validar dados essenciais
     if (!messageId || !from) {
@@ -210,6 +248,7 @@ router.post('/digisac/webhook', async (req, res) => {
         from,
         messageType,
         eventType,
+        rawData: messageData,
       });
       return res.status(200).json({
         status: 'error',
