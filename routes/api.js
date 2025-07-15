@@ -57,11 +57,12 @@ class DigiSacApi {
   async sendMessage(message) {
     try {
       const payload = {
-        to: message.to,
-        type: message.type,
-        text: {
-          body: message.text,
-        },
+        text: message.text, // Texto direto
+        type: 'chat', // Tipo correto conforme documentação
+        serviceId: message.service_id, // ID da conexão
+        number: message.to, // Número do contato
+        userId: message.user_id, // ID do usuário
+        origin: 'user', // bot or user
       };
 
       console.log('📤 Enviando mensagem DigiSac:', payload);
