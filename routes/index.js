@@ -115,36 +115,75 @@ router.post('/digisac/webhook', async (req, res) => {
   try {
     console.log('📥 Webhook recebido do DigiSac:', req.body);
 
-    /**
-     * Estrutura típica de webhook DigiSac:
-     * {
-     *   "id": "message_id",
-     *   "from": "5511999999999",
-     *   "to": "5511888888888",
-     *   "type": "text",
-     *   "text": {
-     *     "body": "Mensagem do usuário"
-     *   },
-     *   "timestamp": "1640995200",
-     *   "status": "received"
-     * }
-     */
+    // Verificar se é um evento de mensagem relevante
+    const eventType = req.body.event;
+    const messageData = req.body.data;
+
+    // Só processar mensagens novas ou atualizadas que não são nossas
+    if (!eventType || !messageData) {
+      console.log('⚠️ Webhook ignorado: sem dados relevantes');
+      return res.status(200).json({ status: 'ignored' });
+    }
+
+    // Ignorar mensagens que enviamos (isFromMe: true)
+    if (messageData.isFromMe === true) {
+      console.log('⚠️ Webhook ignorado: mensagem enviada por nós');
+      return res.status(200).json({ status: 'ignored' });
+    }
+
+    // Só processar eventos de mensagem criada ou atualizada
+    if (!eventType.includes('message.')) {
+      console.log('⚠️ Webhook ignorado: não é evento de mensagem');
+      return res.status(200).json({ status: 'ignored' });
+    }
 
     // Extrair dados da mensagem recebida
-    const messageId = req.body.id || req.body.message_id;
-    const from = req.body.from;
-    const messageBody =
-      req.body.text?.body || req.body.body || req.body.message;
-    const timestamp = req.body.timestamp
-      ? parseInt(req.body.timestamp) * 1000
+    const messageId = messageData.id;
+    const from = messageData.from || messageData.fromId;
+    const messageType = messageData.type;
+    const timestamp = messageData.timestamp
+      ? new Date(messageData.timestamp).getTime()
       : Date.now();
 
+    // Extrair conteúdo baseado no tipo
+    let messageBody = '';
+    switch (messageType) {
+      case 'text':
+        messageBody =
+          messageData.text?.body || messageData.body || messageData.message;
+        break;
+      case 'document':
+        messageBody = `📄 Documento: ${
+          messageData.document?.filename || 'arquivo'
+        }`;
+        break;
+      case 'ptt':
+        messageBody = '🎵 Mensagem de áudio';
+        break;
+      case 'image':
+        messageBody = '🖼️ Imagem';
+        break;
+      default:
+        messageBody = `📎 Mídia (${messageType})`;
+    }
+
     // Validar dados essenciais
-    if (!messageId || !from || !messageBody) {
-      console.error('❌ Webhook DigiSac: dados incompletos', req.body);
-      return res.status(400).json({
-        error: 'Dados incompletos no webhook',
+    if (!messageId || !from) {
+      console.error('❌ Webhook DigiSac: dados incompletos', {
+        messageId,
+        from,
+        messageType,
+        eventType,
       });
+      return res.status(200).json({
+        status: 'error',
+        message: 'Dados incompletos no webhook',
+      });
+    }
+
+    // Se não há conteúdo de texto, usar descrição do tipo
+    if (!messageBody || messageBody.trim() === '') {
+      messageBody = `📎 Mídia (${messageType})`;
     }
 
     // Preparar dados para envio ao respond.io
@@ -157,7 +196,7 @@ router.post('/digisac/webhook', async (req, res) => {
           mId: messageId,
           timestamp: timestamp,
           message: {
-            type: 'text',
+            type: messageType === 'text' ? 'text' : 'text', // Respond.io espera 'text' por enquanto
             text: messageBody,
           },
         },
