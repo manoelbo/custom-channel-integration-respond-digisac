@@ -154,6 +154,13 @@ class DigiSacApi {
    */
   async getContactProfile(phoneNumber) {
     try {
+      console.log('🔍 DigiSac API - Buscando contato:', phoneNumber);
+      console.log(
+        '🔍 DigiSac API - URL:',
+        `${this.baseURL}/contacts/${phoneNumber}`
+      );
+      console.log('🔍 DigiSac API - Headers:', this.headers);
+
       const response = await axios.get(
         `${this.baseURL}/contacts/${phoneNumber}`,
         {
@@ -161,15 +168,24 @@ class DigiSacApi {
         }
       );
 
+      console.log('✅ DigiSac API - Resposta completa:');
+      console.log('📋 Status:', response.status);
+      console.log('📋 Headers:', JSON.stringify(response.headers, null, 2));
+      console.log('📦 Body:', JSON.stringify(response.data, null, 2));
+
       return {
         success: true,
         data: response.data,
       };
     } catch (error) {
+      console.error('❌ DigiSac API - Erro ao obter perfil:');
+      console.error('📋 Status:', error.response?.status);
       console.error(
-        '❌ Erro ao obter perfil:',
-        error.response?.data || error.message
+        '📋 Headers:',
+        JSON.stringify(error.response?.headers, null, 2)
       );
+      console.error('📦 Body:', JSON.stringify(error.response?.data, null, 2));
+      console.error('📦 Error:', error.message);
 
       return {
         success: false,
