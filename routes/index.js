@@ -336,4 +336,19 @@ router.get('/health', (req, res) => {
   });
 });
 
+router.all('*', (req, res) => {
+  console.log('🔍 Rota não encontrada:', {
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    body: req.body,
+  });
+
+  res.status(404).json({
+    error: 'Rota não encontrada',
+    method: req.method,
+    url: req.url,
+  });
+});
+
 module.exports = router;
