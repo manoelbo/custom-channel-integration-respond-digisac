@@ -264,10 +264,51 @@ router.post('/digisac/webhook', async (req, res) => {
       messageBody = `📎 Mídia (${messageType})`;
     }
 
+    // Buscar o número de telefone do contato através da API do DigiSac
+    let contactPhoneNumber = null;
+    try {
+      console.log('🔍 Buscando dados do contato:', from);
+
+      // Tentar obter o número de telefone do contato
+      const contactResult = await digiSacApi.getContactProfile(from);
+
+      if (contactResult.success && contactResult.data) {
+        contactPhoneNumber =
+          contactResult.data.phone ||
+          contactResult.data.number ||
+          contactResult.data.contactId;
+        console.log('📱 Número do contato encontrado:', contactPhoneNumber);
+      } else {
+        console.log(
+          '⚠️ Não foi possível obter dados do contato, usando ID como fallback'
+        );
+        contactPhoneNumber = from;
+      }
+    } catch (error) {
+      console.log(
+        '⚠️ Erro ao buscar dados do contato, usando ID como fallback:',
+        error.message
+      );
+      contactPhoneNumber = from;
+    }
+
+    // Formatar o número de telefone se necessário
+    if (contactPhoneNumber && !contactPhoneNumber.startsWith('+')) {
+      // Se não tem o +, adicionar
+      if (contactPhoneNumber.startsWith('55')) {
+        contactPhoneNumber = '+' + contactPhoneNumber;
+      } else if (contactPhoneNumber.length >= 10) {
+        // Assumir que é um número brasileiro
+        contactPhoneNumber = '+55' + contactPhoneNumber;
+      }
+    }
+
+    console.log('📱 ContactId final para respond.io:', contactPhoneNumber);
+
     // Preparar dados para envio ao respond.io
     const webhookData = {
       channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
-      contactId: from,
+      contactId: contactPhoneNumber,
       events: [
         {
           type: 'message',
