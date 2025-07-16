@@ -273,9 +273,11 @@ router.post('/digisac/webhook', async (req, res) => {
       const contactResult = await digiSacApi.getContactProfile(from);
 
       if (contactResult.success && contactResult.data) {
+        // O número está em body.data.number conforme os logs
         contactPhoneNumber =
-          contactResult.data.phone ||
+          contactResult.data.data?.number ||
           contactResult.data.number ||
+          contactResult.data.phone ||
           contactResult.data.contactId;
         console.log('📱 Número do contato encontrado:', contactPhoneNumber);
       } else {
