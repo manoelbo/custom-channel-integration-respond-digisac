@@ -18,9 +18,9 @@ const DIGISAC_API_TOKEN = process.env.DIGISAC_API_TOKEN || 'YOUR_DIGISAC_TOKEN';
 class DigiSacMessage {
   constructor() {
     this.to = ''; // Número do destinatário
-    this.type = 'text'; // Tipo da mensagem (text, image, document, etc.)
-    this.text = ''; // Texto da mensagem
-    this.media = null; // Mídia (opcional)
+    this.type = 'text'; // Tipo da mensagem (text, image, document, audio)
+    this.text = ''; // Texto da mensagem (opcional para áudio)
+    this.file = null; // Arquivo (base64, mimetype, name)
     this.service_id = '6e9aab4c-94fd-47e0-99f2-06ae04caaa0c';
     this.user_id = 'c3c4de37-afc8-4be0-96a8-4f1f606eeea3';
   }
@@ -56,14 +56,21 @@ class DigiSacApi {
    */
   async sendMessage(message) {
     try {
-      const payload = {
-        text: message.text, // Texto direto
-        type: 'chat', // Tipo correto conforme documentação
-        serviceId: message.service_id, // ID da conexão
+      // Construir payload baseado no tipo de mensagem
+      let payload = {
         number: message.to, // Número do contato
-        userId: message.user_id, // ID do usuário
-        origin: 'user', // bot or user
+        serviceId: message.service_id, // ID da conexão
       };
+
+      // Adicionar texto se existir (exceto para áudio puro)
+      if (message.text && message.text.trim() !== '') {
+        payload.text = message.text;
+      }
+
+      // Adicionar arquivo se existir
+      if (message.file) {
+        payload.file = message.file;
+      }
 
       console.log('📤 Enviando mensagem DigiSac:', payload);
 

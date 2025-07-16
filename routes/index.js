@@ -73,10 +73,10 @@ router.post('/message', (req, res) => {
 
   // Extrair dados da requisição do respond.io
   const phoneNumber = req.body.contactId || req.body.number;
-  const messageText = req.body.text || req.body.message?.text;
+  const messageData = req.body.message || req.body;
 
   console.log('📱 Número de telefone extraído:', phoneNumber);
-  console.log('💬 Texto da mensagem extraído:', messageText);
+  console.log('💬 Dados da mensagem:', JSON.stringify(messageData, null, 2));
 
   // Validar número de telefone brasileiro
   if (!phoneNumber || !isValidBrazilianPhone(phoneNumber)) {
@@ -89,26 +89,64 @@ router.post('/message', (req, res) => {
   }
 
   // Validar mensagem
-  if (!messageText || messageText.trim() === '') {
-    console.log('❌ Erro: Texto da mensagem vazio');
+  if (!messageData || !messageData.type) {
+    console.log('❌ Erro: Dados da mensagem inválidos');
     return res.status(400).json({
       error: {
-        message: 'Texto da mensagem é obrigatório',
+        message: 'Dados da mensagem são obrigatórios',
       },
     });
   }
 
   console.log('✅ Validações passaram');
 
-  // Criar mensagem DigiSac
+  // Criar mensagem DigiSac baseada no tipo
   const digiSacMessage = new DigiSacMessage();
   digiSacMessage.to = formatBrazilianPhoneNumber(phoneNumber);
-  digiSacMessage.type = 'text';
-  digiSacMessage.text = messageText;
+
+  // Processar diferentes tipos de mensagem
+  switch (messageData.type) {
+    case 'text':
+      digiSacMessage.type = 'text';
+      digiSacMessage.text = messageData.text || '';
+      break;
+
+    case 'attachment':
+      processAttachmentMessage(digiSacMessage, messageData.attachment);
+      break;
+
+    case 'location':
+      digiSacMessage.type = 'text';
+      digiSacMessage.text = `📍 Localização: ${
+        messageData.address || 'Localização enviada'
+      }\nLatitude: ${messageData.latitude}\nLongitude: ${
+        messageData.longitude
+      }`;
+      break;
+
+    case 'quick_reply':
+      digiSacMessage.type = 'text';
+      const replies = messageData.replies?.join(', ') || 'Opções disponíveis';
+      digiSacMessage.text = `${
+        messageData.title || 'Selecione uma opção'
+      }\n\n${replies}`;
+      break;
+
+    default:
+      console.log('❌ Erro: Tipo de mensagem não suportado:', messageData.type);
+      return res.status(400).json({
+        error: {
+          message: 'Tipo de mensagem não suportado',
+          supportedTypes: ['text', 'attachment', 'location', 'quick_reply'],
+        },
+      });
+  }
 
   console.log('📤 Enviando mensagem para DigiSac:', {
     to: digiSacMessage.to,
+    type: digiSacMessage.type,
     text: digiSacMessage.text,
+    hasFile: !!digiSacMessage.file,
   });
 
   // Enviar mensagem via DigiSac
@@ -148,6 +186,87 @@ router.post('/message', (req, res) => {
       });
     });
 });
+
+/**
+ * Processar mensagem de anexo (attachment)
+ * @param {DigiSacMessage} digiSacMessage - Mensagem DigiSac
+ * @param {Object} attachment - Dados do anexo do respond.io
+ */
+async function processAttachmentMessage(digiSacMessage, attachment) {
+  try {
+    console.log('📎 Processando anexo:', attachment);
+
+    // Baixar o arquivo da URL
+    const fileResponse = await axios.get(attachment.url, {
+      responseType: 'arraybuffer',
+    });
+
+    // Converter para base64
+    const base64 = Buffer.from(fileResponse.data).toString('base64');
+
+    // Determinar o tipo de arquivo baseado no attachment.type
+    let mimeType = attachment.mimeType || 'application/octet-stream';
+    let fileName = attachment.fileName || 'arquivo';
+
+    switch (attachment.type) {
+      case 'image':
+        digiSacMessage.type = 'image';
+        if (!mimeType.startsWith('image/')) {
+          mimeType = 'image/jpeg'; // fallback
+        }
+        break;
+
+      case 'video':
+        digiSacMessage.type = 'text';
+        digiSacMessage.text = `🎥 Vídeo: ${
+          attachment.description || 'Vídeo enviado'
+        }`;
+        return; // DigiSac não suporta vídeo, enviar como texto
+
+      case 'audio':
+        digiSacMessage.type = 'audio';
+        if (!mimeType.startsWith('audio/')) {
+          mimeType = 'audio/mpeg'; // fallback
+        }
+        break;
+
+      case 'file':
+        digiSacMessage.type = 'document';
+        if (!mimeType.startsWith('application/')) {
+          mimeType = 'application/pdf'; // fallback
+        }
+        break;
+
+      default:
+        digiSacMessage.type = 'text';
+        digiSacMessage.text = `📎 Arquivo: ${
+          attachment.description || 'Arquivo enviado'
+        }`;
+        return;
+    }
+
+    // Configurar o arquivo
+    digiSacMessage.file = {
+      base64: base64,
+      mimetype: mimeType,
+      name: fileName,
+    };
+
+    // Adicionar texto se existir
+    if (attachment.description) {
+      digiSacMessage.text = attachment.description;
+    }
+
+    console.log('✅ Anexo processado com sucesso');
+  } catch (error) {
+    console.error('❌ Erro ao processar anexo:', error);
+    // Fallback para texto
+    digiSacMessage.type = 'text';
+    digiSacMessage.text = `📎 Erro ao processar anexo: ${
+      attachment.description || 'Arquivo não pôde ser processado'
+    }`;
+  }
+}
 
 /**
  * Rota para recebimento de mensagens: FROM DigiSac TO respond.io
@@ -310,12 +429,10 @@ router.post('/digisac/webhook', async (req, res) => {
           '⚠️ [SANDBOX] Mensagem ignorada. Número não está na lista de teste:',
           contactPhoneNumber
         );
-        return res
-          .status(200)
-          .json({
-            status: 'sandbox_ignored',
-            message: 'Número não autorizado para teste.',
-          });
+        return res.status(200).json({
+          status: 'sandbox_ignored',
+          message: 'Número não autorizado para teste.',
+        });
       } else {
         console.log(
           '✅ [SANDBOX] Número autorizado para teste:',
