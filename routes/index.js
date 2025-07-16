@@ -385,8 +385,8 @@ async function processAttachmentMessage(
 async function processDigiSacFile(messageData, phoneNumber) {
   const file = messageData.file;
 
+  // Esta verificação já é feita antes de chamar esta função
   if (!file || !file.url) {
-    conditionalLog(phoneNumber, '⚠️ Arquivo não encontrado na mensagem');
     return null;
   }
 
@@ -544,6 +544,17 @@ router.post('/digisac/webhook', async (req, res) => {
         '⚠️ Webhook ignorado: não é evento de mensagem'
       );
       return res.status(200).json({ status: 'ignored' });
+    }
+
+    // Para mensagens de mídia, verificar se o arquivo está disponível
+    if (['image', 'video', 'audio', 'ptt', 'document'].includes(messageType)) {
+      if (!messageData.file || !messageData.file.url) {
+        conditionalLog(
+          contactPhoneNumber,
+          '⚠️ Webhook ignorado: arquivo ainda não processado'
+        );
+        return res.status(200).json({ status: 'ignored' });
+      }
     }
 
     conditionalLog(contactPhoneNumber, '🔍 Dados extraídos:', {
