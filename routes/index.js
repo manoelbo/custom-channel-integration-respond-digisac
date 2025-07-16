@@ -382,69 +382,6 @@ async function processAttachmentMessage(
  * @param {string} phoneNumber - Número de telefone
  * @returns {Object} - Dados da mensagem processada para respond.io
  */
-/**
- * Função para aguardar processamento de vídeo com timeout
- * @param {string} messageId - ID da mensagem
- * @param {string} phoneNumber - Número do telefone
- * @returns {Promise<boolean>} - true se o vídeo foi processado, false se timeout
- */
-async function waitForVideoProcessing(messageId, phoneNumber) {
-  const maxAttempts = 12; // 12 tentativas * 5 segundos = 1 minuto
-  const delayMs = 5000; // 5 segundos entre tentativas
-
-  conditionalLog(
-    phoneNumber,
-    '⏳ Iniciando aguardo para processamento do vídeo...'
-  );
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      conditionalLog(
-        phoneNumber,
-        `🔄 Tentativa ${attempt}/${maxAttempts} - verificando vídeo...`
-      );
-
-      // Consultar status da mensagem na API do DigiSac
-      const result = await digiSacApi.getMessageStatus(messageId);
-
-      if (result.success && result.data) {
-        const messageData = result.data;
-
-        // Verificar se o arquivo está disponível
-        if (messageData.file && messageData.file.url) {
-          conditionalLog(phoneNumber, '✅ Vídeo processado e disponível!');
-          return true;
-        }
-      }
-
-      // Aguardar antes da próxima tentativa
-      if (attempt < maxAttempts) {
-        conditionalLog(
-          phoneNumber,
-          `⏳ Aguardando ${delayMs / 1000}s antes da próxima tentativa...`
-        );
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    } catch (error) {
-      conditionalLog(
-        phoneNumber,
-        `⚠️ Erro na tentativa ${attempt}:`,
-        error.message
-      );
-
-      // Se for erro de rede, continuar tentando
-      if (attempt < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-  }
-
-  conditionalLog(
-    phoneNumber,
-    '❌ Timeout: vídeo não foi processado em 1 minuto'
-  );
-  return false;
-}
 
 async function processDigiSacFile(messageData, phoneNumber) {
   const file = messageData.file;
@@ -570,6 +507,28 @@ router.post('/digisac/webhook', async (req, res) => {
       contactPhoneNumber
     );
 
+    // SANDBOX: APLICAR FILTRO DE NÚMEROS NO INÍCIO
+    // Só processa se o número estiver na lista de teste
+    if (SANDBOX_MODE) {
+      if (!SANDBOX_NUMBERS.includes(contactPhoneNumber)) {
+        conditionalLog(
+          contactPhoneNumber,
+          '⚠️ [SANDBOX] Mensagem ignorada. Número não está na lista de teste:',
+          contactPhoneNumber
+        );
+        return res.status(200).json({
+          status: 'sandbox_ignored',
+          message: 'Número não autorizado para teste.',
+        });
+      } else {
+        conditionalLog(
+          contactPhoneNumber,
+          '✅ [SANDBOX] Número autorizado para teste:',
+          contactPhoneNumber
+        );
+      }
+    }
+
     // Log detalhado da estrutura completa do webhook (só para números autorizados)
     conditionalLog(
       contactPhoneNumber,
@@ -620,7 +579,7 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     // Para mensagens de mídia, verificar se o arquivo está disponível
-    // EXCEÇÃO: vídeos podem ser processados mesmo sem arquivo (devido ao tempo de processamento)
+    // VÍDEOS: Ignorar se não tiver arquivo (DigiSac não envia URL no webhook inicial)
     if (['image', 'audio', 'ptt', 'document'].includes(messageType)) {
       if (!messageData.file || !messageData.file.url) {
         conditionalLog(
@@ -631,80 +590,17 @@ router.post('/digisac/webhook', async (req, res) => {
       }
     }
 
-    // Para vídeos, implementar retry com timeout
+    // VÍDEOS: Ignorar completamente se não tiver arquivo
+    // O DigiSac não envia a URL do vídeo no webhook inicial, então não tentamos processar
     if (
       messageType === 'video' &&
       (!messageData.file || !messageData.file.url)
     ) {
       conditionalLog(
         contactPhoneNumber,
-        '📹 Vídeo detectado sem arquivo - aguardando processamento...'
+        '⚠️ Webhook ignorado: vídeo sem arquivo (aguardando webhook com arquivo)'
       );
-
-      // Aguardar processamento do vídeo com timeout de 1 minuto
-      const videoProcessed = await waitForVideoProcessing(
-        messageId,
-        contactPhoneNumber
-      );
-
-      if (videoProcessed) {
-        conditionalLog(contactPhoneNumber, '✅ Vídeo processado com sucesso');
-
-        // Buscar dados atualizados da mensagem
-        try {
-          const result = await digiSacApi.getMessageStatus(messageId);
-          if (result.success && result.data) {
-            messageData = result.data; // Atualizar dados da mensagem
-          }
-        } catch (error) {
-          conditionalLog(
-            contactPhoneNumber,
-            '⚠️ Erro ao buscar dados atualizados:',
-            error.message
-          );
-        }
-
-        // Continuar processamento normal
-      } else {
-        conditionalLog(
-          contactPhoneNumber,
-          '❌ Timeout: vídeo não foi processado em 1 minuto'
-        );
-        // Enviar mensagem de erro
-        const errorMessage = {
-          type: 'text',
-          text: '❌ Erro: Vídeo não pôde ser processado (timeout)',
-        };
-
-        const webhookData = {
-          channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
-          contactId: contactPhoneNumber,
-          events: [
-            {
-              type: 'message',
-              mId: messageId,
-              timestamp: timestamp,
-              message: errorMessage,
-            },
-          ],
-        };
-
-        await axios({
-          method: 'post',
-          url: 'https://app.respond.io/custom/channel/webhook/',
-          headers: {
-            authorization: `Bearer ${CHANNEL_API_TOKEN}`,
-            'content-type': 'application/json',
-            'cache-control': 'no-cache',
-          },
-          data: webhookData,
-        });
-
-        return res.status(200).json({
-          status: 'success',
-          message: 'Mensagem de erro enviada para vídeo com timeout',
-        });
-      }
+      return res.status(200).json({ status: 'ignored' });
     }
 
     conditionalLog(contactPhoneNumber, '🔍 Dados extraídos:', {
@@ -734,7 +630,9 @@ router.post('/digisac/webhook', async (req, res) => {
       };
     } else {
       // Para tipos de mídia, sempre tentar processar como attachment
-      if (['image', 'audio', 'ptt', 'document'].includes(messageType)) {
+      if (
+        ['image', 'audio', 'ptt', 'document', 'video'].includes(messageType)
+      ) {
         conditionalLog(contactPhoneNumber, '📎 Processando mídia do DigiSac');
         processedMessage = await processDigiSacFile(
           messageData,
@@ -756,28 +654,13 @@ router.post('/digisac/webhook', async (req, res) => {
             case 'image':
               messageBody = '🖼️ Imagem';
               break;
+            case 'video':
+              messageBody = '🎥 Vídeo';
+              break;
             default:
               messageBody = `📎 Mídia (${messageType})`;
           }
 
-          processedMessage = {
-            type: 'text',
-            text: messageBody,
-          };
-        }
-      } else if (messageType === 'video') {
-        // Tratamento especial para vídeos
-        conditionalLog(contactPhoneNumber, '🎥 Processando vídeo do DigiSac');
-        processedMessage = await processDigiSacFile(
-          messageData,
-          contactPhoneNumber
-        );
-
-        if (processedMessage) {
-          messageBody = `📹 ${processedMessage.attachment.fileName}`;
-        } else {
-          // Para vídeos sem arquivo, enviar mensagem informativa
-          messageBody = '🎥 Vídeo (processando...)';
           processedMessage = {
             type: 'text',
             text: messageBody,
@@ -836,27 +719,6 @@ router.post('/digisac/webhook', async (req, res) => {
     // Se não há conteúdo de texto, usar descrição do tipo
     if (!messageBody || messageBody.trim() === '') {
       messageBody = `📎 Mídia (${messageType})`;
-    }
-
-    // SANDBOX: só processa se o número estiver na lista
-    if (SANDBOX_MODE) {
-      if (!SANDBOX_NUMBERS.includes(contactPhoneNumber)) {
-        conditionalLog(
-          contactPhoneNumber,
-          '⚠️ [SANDBOX] Mensagem ignorada. Número não está na lista de teste:',
-          contactPhoneNumber
-        );
-        return res.status(200).json({
-          status: 'sandbox_ignored',
-          message: 'Número não autorizado para teste.',
-        });
-      } else {
-        conditionalLog(
-          contactPhoneNumber,
-          '✅ [SANDBOX] Número autorizado para teste:',
-          contactPhoneNumber
-        );
-      }
     }
 
     // Preparar dados para envio ao respond.io
