@@ -226,6 +226,42 @@ class DigiSacApi {
   }
 
   /**
+   * Buscar mensagem com arquivos incluídos
+   * @param {string} messageId - ID da mensagem
+   * @returns {Promise}
+   */
+  async getMessageWithFile(messageId) {
+    try {
+      const response = await axios.get(
+        `${this.baseURL}/messages/${messageId}?include[0]=file`,
+        {
+          headers: this.headers,
+        }
+      );
+
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error) {
+      console.error(
+        '❌ Erro ao buscar mensagem com arquivo:',
+        error.response?.data || error.message
+      );
+
+      return {
+        success: false,
+        error: {
+          code: error.response?.status || 500,
+          message:
+            error.response?.data?.message ||
+            'Erro ao buscar mensagem com arquivo',
+        },
+      };
+    }
+  }
+
+  /**
    * Obter perfil de um contato
    * @param {string} phoneNumber - Número do telefone
    * @returns {Promise}

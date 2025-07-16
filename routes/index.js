@@ -603,6 +603,85 @@ router.post('/digisac/webhook', async (req, res) => {
       return res.status(200).json({ status: 'ignored' });
     }
 
+    // VÍDEOS: Tentar buscar arquivo via API se não estiver disponível no webhook
+    if (
+      messageType === 'video' &&
+      (!messageData.file || !messageData.file.url)
+    ) {
+      conditionalLog(
+        contactPhoneNumber,
+        '🎥 Vídeo detectado sem arquivo - tentando buscar via API...'
+      );
+
+      // Aguardar um pouco para o processamento
+      await new Promise((resolve) => setTimeout(resolve, 3000)); // 3 segundos
+
+      try {
+        // Buscar mensagem com arquivo incluído
+        const result = await digiSacApi.getMessageWithFile(messageId);
+
+        if (result.success && result.data) {
+          conditionalLog(
+            contactPhoneNumber,
+            '📋 Resposta completa da API para vídeo:',
+            JSON.stringify(result.data, null, 2)
+          );
+
+          // Verificar se o arquivo está disponível na resposta da API
+          if (result.data.file && result.data.file.url) {
+            conditionalLog(
+              contactPhoneNumber,
+              '✅ Arquivo de vídeo encontrado via API!'
+            );
+            // Atualizar dados da mensagem com os dados da API
+            messageData = result.data;
+          } else {
+            conditionalLog(
+              contactPhoneNumber,
+              '⚠️ Arquivo de vídeo ainda não disponível via API'
+            );
+            // Aguardar mais um pouco e tentar novamente
+            await new Promise((resolve) => setTimeout(resolve, 5000)); // +5 segundos
+
+            const retryResult = await digiSacApi.getMessageWithFile(messageId);
+            if (retryResult.success && retryResult.data) {
+              conditionalLog(
+                contactPhoneNumber,
+                '📋 Resposta da segunda tentativa:',
+                JSON.stringify(retryResult.data, null, 2)
+              );
+
+              if (retryResult.data.file && retryResult.data.file.url) {
+                conditionalLog(
+                  contactPhoneNumber,
+                  '✅ Arquivo de vídeo encontrado na segunda tentativa!'
+                );
+                messageData = retryResult.data;
+              } else {
+                conditionalLog(
+                  contactPhoneNumber,
+                  '❌ Arquivo de vídeo não disponível após tentativas'
+                );
+                // Continuar com processamento normal (enviará mensagem de texto)
+              }
+            }
+          }
+        } else {
+          conditionalLog(
+            contactPhoneNumber,
+            '❌ Erro ao buscar vídeo via API:',
+            result.error
+          );
+        }
+      } catch (error) {
+        conditionalLog(
+          contactPhoneNumber,
+          '❌ Erro ao tentar buscar vídeo via API:',
+          error.message
+        );
+      }
+    }
+
     conditionalLog(contactPhoneNumber, '🔍 Dados extraídos:', {
       messageId,
       from,
