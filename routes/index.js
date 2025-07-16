@@ -436,7 +436,16 @@ router.post('/digisac/webhook', async (req, res) => {
   try {
     // Verificar se é um evento de mensagem relevante
     const eventType = req.body.event;
-    const messageData = req.body.data;
+    let messageData = req.body.data;
+
+    // Se messageData for um array, pegar apenas a primeira mensagem
+    if (Array.isArray(messageData)) {
+      conditionalLog(
+        'system',
+        '📋 Webhook contém array de mensagens, processando apenas a primeira'
+      );
+      messageData = messageData[0];
+    }
 
     // Extrair dados da mensagem recebida com mais flexibilidade
     const messageId =
