@@ -309,7 +309,7 @@ router.post('/digisac/webhook', async (req, res) => {
 
     // Preparar dados para envio ao respond.io
     const webhookData = {
-      channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
+      channelId: '398213', //process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
       contactId: contactPhoneNumber,
       events: [
         {
