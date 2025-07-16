@@ -391,25 +391,10 @@ async function processDigiSacFile(messageData, phoneNumber) {
   }
 
   try {
-    conditionalLog(phoneNumber, '📥 Baixando arquivo do DigiSac:', {
+    conditionalLog(phoneNumber, '📎 Processando arquivo do DigiSac:', {
       fileName: file.name,
       mimeType: file.mimetype,
       url: file.url,
-    });
-
-    // Baixar o arquivo
-    const response = await axios.get(file.url, {
-      responseType: 'arraybuffer',
-      timeout: 30000,
-    });
-
-    const buffer = Buffer.from(response.data);
-    const base64 = buffer.toString('base64');
-
-    conditionalLog(phoneNumber, '✅ Arquivo baixado com sucesso:', {
-      fileName: file.name,
-      size: buffer.length,
-      base64Length: base64.length,
     });
 
     // Determinar o tipo de mensagem baseado no MIME type
@@ -437,10 +422,10 @@ async function processDigiSacFile(messageData, phoneNumber) {
       type: messageType,
       attachment: {
         type: attachmentType,
-        url: `data:${file.mimetype};base64,${base64}`,
+        url: file.url, // Usar URL original do DigiSac
         fileName: file.name,
         mimeType: file.mimetype,
-        size: buffer.length,
+        size: file.size || 0,
       },
     };
   } catch (error) {
