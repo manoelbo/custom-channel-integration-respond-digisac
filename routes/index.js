@@ -397,96 +397,38 @@ async function processDigiSacFile(messageData, phoneNumber) {
       url: file.url,
     });
 
-    // Verificar se a URL está acessível
+    // Sempre baixar o arquivo e converter para base64 para garantir compatibilidade
+    conditionalLog(phoneNumber, '🔄 Baixando arquivo para conversão base64...');
+
     try {
-      const response = await axios.head(file.url, {
-        timeout: 10000,
-        validateStatus: (status) => status < 400,
+      const downloadResponse = await axios.get(file.url, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; DigiSac-Integration/1.0)',
+        },
       });
 
-      conditionalLog(phoneNumber, '✅ URL do arquivo está acessível:', {
-        status: response.status,
-        contentType: response.headers['content-type'],
+      const buffer = Buffer.from(downloadResponse.data);
+      const base64 = buffer.toString('base64');
+
+      conditionalLog(phoneNumber, '✅ Arquivo baixado com sucesso:', {
+        fileName: file.name,
+        size: buffer.length,
+        base64Length: base64.length,
       });
-    } catch (urlError) {
+    } catch (downloadError) {
       conditionalLog(
         phoneNumber,
-        '⚠️ URL do arquivo não está acessível:',
-        urlError.message
+        '❌ Falha ao baixar arquivo:',
+        downloadError.message
       );
 
-      // Tentar baixar o arquivo e converter para base64 como fallback
-      try {
-        conditionalLog(
-          phoneNumber,
-          '🔄 Tentando baixar arquivo como fallback...'
-        );
-
-        const downloadResponse = await axios.get(file.url, {
-          responseType: 'arraybuffer',
-          timeout: 30000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; DigiSac-Integration/1.0)',
-          },
-        });
-
-        const buffer = Buffer.from(downloadResponse.data);
-        const base64 = buffer.toString('base64');
-
-        conditionalLog(
-          phoneNumber,
-          '✅ Arquivo baixado com sucesso como fallback:',
-          {
-            fileName: file.name,
-            size: buffer.length,
-            base64Length: base64.length,
-          }
-        );
-
-        // Determinar o tipo de mensagem baseado no MIME type
-        let messageType = 'attachment';
-        let attachmentType = 'file';
-
-        if (file.mimetype.startsWith('image/')) {
-          messageType = 'attachment';
-          attachmentType = 'image';
-        } else if (file.mimetype.startsWith('audio/')) {
-          messageType = 'attachment';
-          attachmentType = 'audio';
-        } else if (file.mimetype.startsWith('video/')) {
-          messageType = 'attachment';
-          attachmentType = 'video';
-        } else if (file.mimetype === 'application/pdf') {
-          messageType = 'attachment';
-          attachmentType = 'file';
-        } else {
-          messageType = 'attachment';
-          attachmentType = 'file';
-        }
-
-        return {
-          type: messageType,
-          attachment: {
-            type: attachmentType,
-            url: `data:${file.mimetype};base64,${base64}`,
-            fileName: file.name,
-            mimeType: file.mimetype,
-            size: buffer.length,
-          },
-        };
-      } catch (downloadError) {
-        conditionalLog(
-          phoneNumber,
-          '❌ Falha ao baixar arquivo como fallback:',
-          downloadError.message
-        );
-
-        // Se não conseguir baixar, enviar como texto com informações do arquivo
-        return {
-          type: 'text',
-          text: `📎 ${file.name} (${file.mimetype}) - Arquivo não acessível`,
-        };
-      }
+      // Se não conseguir baixar, enviar como texto com informações do arquivo
+      return {
+        type: 'text',
+        text: `📎 ${file.name} (${file.mimetype}) - Arquivo não acessível`,
+      };
     }
 
     // Determinar o tipo de mensagem baseado no MIME type
@@ -514,10 +456,10 @@ async function processDigiSacFile(messageData, phoneNumber) {
       type: messageType,
       attachment: {
         type: attachmentType,
-        url: file.url, // Usar URL original do DigiSac
+        url: `data:${file.mimetype};base64,${base64}`,
         fileName: file.name,
         mimeType: file.mimetype,
-        size: file.size || 0,
+        size: buffer.length,
       },
     };
   } catch (error) {
