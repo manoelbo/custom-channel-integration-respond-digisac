@@ -612,12 +612,11 @@ router.post('/digisac/webhook', async (req, res) => {
         text: messageBody,
       };
     } else {
-      // Para outros tipos, verificar se há arquivo para processar
-      if (messageData.file && messageData.file.url) {
-        conditionalLog(
-          contactPhoneNumber,
-          '📎 Processando arquivo recebido do DigiSac'
-        );
+      // Para tipos de mídia, sempre tentar processar como attachment
+      if (
+        ['image', 'video', 'audio', 'ptt', 'document'].includes(messageType)
+      ) {
+        conditionalLog(contactPhoneNumber, '📎 Processando mídia do DigiSac');
         processedMessage = await processDigiSacFile(
           messageData,
           contactPhoneNumber
@@ -626,12 +625,10 @@ router.post('/digisac/webhook', async (req, res) => {
         if (processedMessage) {
           messageBody = `📎 ${processedMessage.attachment.fileName}`;
         } else {
-          // Fallback se não conseguir processar o arquivo
+          // Fallback se não conseguir processar
           switch (messageType) {
             case 'document':
-              messageBody = `📄 Documento: ${
-                messageData.file?.name || 'arquivo'
-              }`;
+              messageBody = `📄 Documento: arquivo`;
               break;
             case 'ptt':
             case 'audio':
@@ -643,15 +640,6 @@ router.post('/digisac/webhook', async (req, res) => {
             case 'video':
               messageBody = '🎥 Vídeo';
               break;
-            case 'location':
-              messageBody = '📍 Localização';
-              break;
-            case 'contact':
-              messageBody = '👤 Contato';
-              break;
-            case 'sticker':
-              messageBody = '😀 Sticker';
-              break;
             default:
               messageBody = `📎 Mídia (${messageType})`;
           }
@@ -662,25 +650,8 @@ router.post('/digisac/webhook', async (req, res) => {
           };
         }
       } else {
-        // Se não há arquivo, usar descrição do tipo
+        // Para outros tipos (location, contact, sticker), usar texto
         switch (messageType) {
-          case 'document':
-            messageBody = `📄 Documento: ${
-              messageData.document?.filename ||
-              messageData.filename ||
-              'arquivo'
-            }`;
-            break;
-          case 'ptt':
-          case 'audio':
-            messageBody = '🎵 Mensagem de áudio';
-            break;
-          case 'image':
-            messageBody = '🖼️ Imagem';
-            break;
-          case 'video':
-            messageBody = '🎥 Vídeo';
-            break;
           case 'location':
             messageBody = '📍 Localização';
             break;
