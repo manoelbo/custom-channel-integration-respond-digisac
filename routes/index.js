@@ -377,6 +377,79 @@ async function processAttachmentMessage(
 }
 
 /**
+ * Função para processar arquivos recebidos do DigiSac
+ * @param {Object} messageData - Dados da mensagem do DigiSac
+ * @param {string} phoneNumber - Número de telefone
+ * @returns {Object} - Dados da mensagem processada para respond.io
+ */
+async function processDigiSacFile(messageData, phoneNumber) {
+  const file = messageData.file;
+
+  if (!file || !file.url) {
+    conditionalLog(phoneNumber, '⚠️ Arquivo não encontrado na mensagem');
+    return null;
+  }
+
+  try {
+    conditionalLog(phoneNumber, '📥 Baixando arquivo do DigiSac:', {
+      fileName: file.name,
+      mimeType: file.mimetype,
+      url: file.url,
+    });
+
+    // Baixar o arquivo
+    const response = await axios.get(file.url, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    });
+
+    const buffer = Buffer.from(response.data);
+    const base64 = buffer.toString('base64');
+
+    conditionalLog(phoneNumber, '✅ Arquivo baixado com sucesso:', {
+      fileName: file.name,
+      size: buffer.length,
+      base64Length: base64.length,
+    });
+
+    // Determinar o tipo de mensagem baseado no MIME type
+    let messageType = 'attachment';
+    let attachmentType = 'file';
+
+    if (file.mimetype.startsWith('image/')) {
+      messageType = 'attachment';
+      attachmentType = 'image';
+    } else if (file.mimetype.startsWith('audio/')) {
+      messageType = 'attachment';
+      attachmentType = 'audio';
+    } else if (file.mimetype.startsWith('video/')) {
+      messageType = 'attachment';
+      attachmentType = 'video';
+    } else if (file.mimetype === 'application/pdf') {
+      messageType = 'attachment';
+      attachmentType = 'file';
+    } else {
+      messageType = 'attachment';
+      attachmentType = 'file';
+    }
+
+    return {
+      type: messageType,
+      attachment: {
+        type: attachmentType,
+        url: `data:${file.mimetype};base64,${base64}`,
+        fileName: file.name,
+        mimeType: file.mimetype,
+        size: buffer.length,
+      },
+    };
+  } catch (error) {
+    conditionalLog(phoneNumber, '❌ Erro ao baixar arquivo:', error.message);
+    return null;
+  }
+}
+
+/**
  * Rota para recebimento de mensagens: FROM DigiSac TO respond.io
  * Endpoint: POST /digisac/webhook
  */
@@ -502,8 +575,9 @@ router.post('/digisac/webhook', async (req, res) => {
       timestamp,
     });
 
-    // Extrair conteúdo baseado no tipo com mais opções
+    // Processar mensagem baseada no tipo
     let messageBody = '';
+    let processedMessage = null;
 
     // Para mensagens do tipo 'chat', o texto está diretamente no campo 'text'
     if (messageType === 'chat' || messageType === 'text') {
@@ -513,34 +587,98 @@ router.post('/digisac/webhook', async (req, res) => {
         messageData.message ||
         messageData.content ||
         '';
+
+      processedMessage = {
+        type: 'text',
+        text: messageBody,
+      };
     } else {
-      switch (messageType) {
-        case 'document':
-          messageBody = `📄 Documento: ${
-            messageData.document?.filename || messageData.filename || 'arquivo'
-          }`;
-          break;
-        case 'ptt':
-        case 'audio':
-          messageBody = '🎵 Mensagem de áudio';
-          break;
-        case 'image':
-          messageBody = '🖼️ Imagem';
-          break;
-        case 'video':
-          messageBody = '🎥 Vídeo';
-          break;
-        case 'location':
-          messageBody = '📍 Localização';
-          break;
-        case 'contact':
-          messageBody = '👤 Contato';
-          break;
-        case 'sticker':
-          messageBody = '😀 Sticker';
-          break;
-        default:
-          messageBody = `📎 Mídia (${messageType})`;
+      // Para outros tipos, verificar se há arquivo para processar
+      if (messageData.file && messageData.file.url) {
+        conditionalLog(
+          contactPhoneNumber,
+          '📎 Processando arquivo recebido do DigiSac'
+        );
+        processedMessage = await processDigiSacFile(
+          messageData,
+          contactPhoneNumber
+        );
+
+        if (processedMessage) {
+          messageBody = `📎 ${processedMessage.attachment.fileName}`;
+        } else {
+          // Fallback se não conseguir processar o arquivo
+          switch (messageType) {
+            case 'document':
+              messageBody = `📄 Documento: ${
+                messageData.file?.name || 'arquivo'
+              }`;
+              break;
+            case 'ptt':
+            case 'audio':
+              messageBody = '🎵 Mensagem de áudio';
+              break;
+            case 'image':
+              messageBody = '🖼️ Imagem';
+              break;
+            case 'video':
+              messageBody = '🎥 Vídeo';
+              break;
+            case 'location':
+              messageBody = '📍 Localização';
+              break;
+            case 'contact':
+              messageBody = '👤 Contato';
+              break;
+            case 'sticker':
+              messageBody = '😀 Sticker';
+              break;
+            default:
+              messageBody = `📎 Mídia (${messageType})`;
+          }
+
+          processedMessage = {
+            type: 'text',
+            text: messageBody,
+          };
+        }
+      } else {
+        // Se não há arquivo, usar descrição do tipo
+        switch (messageType) {
+          case 'document':
+            messageBody = `📄 Documento: ${
+              messageData.document?.filename ||
+              messageData.filename ||
+              'arquivo'
+            }`;
+            break;
+          case 'ptt':
+          case 'audio':
+            messageBody = '🎵 Mensagem de áudio';
+            break;
+          case 'image':
+            messageBody = '🖼️ Imagem';
+            break;
+          case 'video':
+            messageBody = '🎥 Vídeo';
+            break;
+          case 'location':
+            messageBody = '📍 Localização';
+            break;
+          case 'contact':
+            messageBody = '👤 Contato';
+            break;
+          case 'sticker':
+            messageBody = '😀 Sticker';
+            break;
+          default:
+            messageBody = `📎 Mídia (${messageType})`;
+        }
+
+        processedMessage = {
+          type: 'text',
+          text: messageBody,
+        };
       }
     }
 
@@ -548,6 +686,12 @@ router.post('/digisac/webhook', async (req, res) => {
       contactPhoneNumber,
       '🔍 Message Body extraído:',
       messageBody
+    );
+
+    conditionalLog(
+      contactPhoneNumber,
+      '🔍 Mensagem processada:',
+      processedMessage
     );
 
     // Validar dados essenciais
@@ -600,10 +744,7 @@ router.post('/digisac/webhook', async (req, res) => {
           type: 'message',
           mId: messageId,
           timestamp: timestamp,
-          message: {
-            type: messageType === 'text' ? 'text' : 'text', // Respond.io espera 'text' por enquanto
-            text: messageBody,
-          },
+          message: processedMessage,
         },
       ],
     };
