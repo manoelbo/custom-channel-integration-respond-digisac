@@ -22,6 +22,12 @@ const CHANNEL_API_TOKEN = process.env.RESPOND_IO_TOKEN || '<API Token>';
 
 const router = express.Router();
 
+const SANDBOX_MODE = process.env.SANDBOX_MODE === 'true';
+const SANDBOX_NUMBERS = (process.env.SANDBOX_NUMBERS || '')
+  .split(',')
+  .map((n) => n.trim())
+  .filter(Boolean);
+
 /**
  * Rota para envio de mensagens: FROM respond.io TO DigiSac
  * Endpoint: POST /message
@@ -268,12 +274,8 @@ router.post('/digisac/webhook', async (req, res) => {
     let contactPhoneNumber = null;
     try {
       console.log('🔍 Buscando dados do contato:', from);
-
-      // Tentar obter o número de telefone do contato
       const contactResult = await digiSacApi.getContactProfile(from);
-
       if (contactResult.success && contactResult.data) {
-        // O número está em body.data.number conforme os logs
         contactPhoneNumber =
           contactResult.data.data?.number ||
           contactResult.data.number ||
@@ -293,19 +295,34 @@ router.post('/digisac/webhook', async (req, res) => {
       );
       contactPhoneNumber = from;
     }
-
-    // Formatar o número de telefone se necessário
     if (contactPhoneNumber && !contactPhoneNumber.startsWith('+')) {
-      // Se não tem o +, adicionar
       if (contactPhoneNumber.startsWith('55')) {
         contactPhoneNumber = '+' + contactPhoneNumber;
       } else if (contactPhoneNumber.length >= 10) {
-        // Assumir que é um número brasileiro
         contactPhoneNumber = '+55' + contactPhoneNumber;
       }
     }
-
     console.log('📱 ContactId final para respond.io:', contactPhoneNumber);
+    // SANDBOX: só processa se o número estiver na lista
+    if (SANDBOX_MODE) {
+      if (!SANDBOX_NUMBERS.includes(contactPhoneNumber)) {
+        console.log(
+          '⚠️ [SANDBOX] Mensagem ignorada. Número não está na lista de teste:',
+          contactPhoneNumber
+        );
+        return res
+          .status(200)
+          .json({
+            status: 'sandbox_ignored',
+            message: 'Número não autorizado para teste.',
+          });
+      } else {
+        console.log(
+          '✅ [SANDBOX] Número autorizado para teste:',
+          contactPhoneNumber
+        );
+      }
+    }
 
     // Preparar dados para envio ao respond.io
     const webhookData = {
@@ -329,7 +346,7 @@ router.post('/digisac/webhook', async (req, res) => {
     // Enviar para o webhook do respond.io
     const respondIoResponse = await axios({
       method: 'post',
-      url: 'https://app.respond.io/custom/webhook',
+      url: ' https://app.respond.io/custom/channel/webhook/',
       headers: {
         authorization: `Bearer ${CHANNEL_API_TOKEN}`,
         'content-type': 'application/json',
