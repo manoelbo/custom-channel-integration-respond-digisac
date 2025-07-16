@@ -309,7 +309,7 @@ router.post('/digisac/webhook', async (req, res) => {
 
     // Preparar dados para envio ao respond.io
     const webhookData = {
-      channelId: '398213', //process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
+      channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
       contactId: contactPhoneNumber,
       events: [
         {
@@ -329,7 +329,7 @@ router.post('/digisac/webhook', async (req, res) => {
     // Enviar para o webhook do respond.io
     const respondIoResponse = await axios({
       method: 'post',
-      url: 'https://app.respond.io/custom/webhook',
+      url: ' https://app.respond.io/custom/channel/webhook/',
       headers: {
         authorization: `Bearer ${CHANNEL_API_TOKEN}`,
         'content-type': 'application/json',
