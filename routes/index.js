@@ -397,69 +397,29 @@ async function processDigiSacFile(messageData, phoneNumber) {
       url: file.url,
     });
 
-    // Sempre baixar o arquivo e converter para base64 para garantir compatibilidade
-    conditionalLog(phoneNumber, '🔄 Baixando arquivo para conversão base64...');
-
-    try {
-      const downloadResponse = await axios.get(file.url, {
-        responseType: 'arraybuffer',
-        timeout: 30000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; DigiSac-Integration/1.0)',
-        },
-      });
-
-      const buffer = Buffer.from(downloadResponse.data);
-      const base64 = buffer.toString('base64');
-
-      conditionalLog(phoneNumber, '✅ Arquivo baixado com sucesso:', {
-        fileName: file.name,
-        size: buffer.length,
-        base64Length: base64.length,
-      });
-    } catch (downloadError) {
-      conditionalLog(
-        phoneNumber,
-        '❌ Falha ao baixar arquivo:',
-        downloadError.message
-      );
-
-      // Se não conseguir baixar, enviar como texto com informações do arquivo
-      return {
-        type: 'text',
-        text: `📎 ${file.name} (${file.mimetype}) - Arquivo não acessível`,
-      };
-    }
-
     // Determinar o tipo de mensagem baseado no MIME type
-    let messageType = 'attachment';
     let attachmentType = 'file';
 
     if (file.mimetype.startsWith('image/')) {
-      messageType = 'attachment';
       attachmentType = 'image';
     } else if (file.mimetype.startsWith('audio/')) {
-      messageType = 'attachment';
       attachmentType = 'audio';
     } else if (file.mimetype.startsWith('video/')) {
-      messageType = 'attachment';
       attachmentType = 'video';
     } else if (file.mimetype === 'application/pdf') {
-      messageType = 'attachment';
       attachmentType = 'file';
     } else {
-      messageType = 'attachment';
       attachmentType = 'file';
     }
 
     return {
-      type: messageType,
+      type: 'attachment',
       attachment: {
         type: attachmentType,
-        url: `data:${file.mimetype};base64,${base64}`,
+        url: file.url, // Usar URL diretamente do DigiSac
         fileName: file.name,
         mimeType: file.mimetype,
-        size: buffer.length,
+        description: file.name, // Usar nome do arquivo como descrição
       },
     };
   } catch (error) {
