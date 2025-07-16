@@ -329,7 +329,7 @@ router.post('/digisac/webhook', async (req, res) => {
     // Enviar para o webhook do respond.io
     const respondIoResponse = await axios({
       method: 'post',
-      url: ' https://app.respond.io/custom/channel/webhook/',
+      url: 'https://app.respond.io/custom/webhook',
       headers: {
         authorization: `Bearer ${CHANNEL_API_TOKEN}`,
         'content-type': 'application/json',
