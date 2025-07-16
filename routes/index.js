@@ -342,9 +342,11 @@ async function processAttachmentMessage(
       name: fileName,
     };
 
-    // Adicionar texto se existir
-    if (attachment.description) {
+    // Adicionar texto - usar descrição se existir, senão usar nome do arquivo
+    if (attachment.description && attachment.description.trim() !== '') {
       digiSacMessage.text = attachment.description;
+    } else {
+      digiSacMessage.text = fileName;
     }
 
     conditionalLog(phoneNumber, '✅ Anexo processado com sucesso');
