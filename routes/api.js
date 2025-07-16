@@ -12,6 +12,70 @@ const DIGISAC_API_BASE_URL =
   process.env.DIGISAC_API_URL || 'https://api.sac.digital/v1';
 const DIGISAC_API_TOKEN = process.env.DIGISAC_API_TOKEN || 'YOUR_DIGISAC_TOKEN';
 
+// Configurações de sandbox
+const SANDBOX_MODE = process.env.SANDBOX_MODE === 'true';
+const SANDBOX_NUMBERS = (process.env.SANDBOX_NUMBERS || '')
+  .split(',')
+  .map((n) => n.trim())
+  .filter(Boolean);
+
+/**
+ * Função helper para logs condicionais
+ * Só mostra logs detalhados quando estiver no modo sandbox e para números autorizados
+ * @param {string} phoneNumber - Número de telefone
+ * @param {string} message - Mensagem do log
+ * @param {any} data - Dados adicionais (opcional)
+ */
+function conditionalLog(phoneNumber, message, data = null) {
+  // Sempre mostrar logs de erro
+  if (message.includes('❌') || message.includes('⚠️')) {
+    if (data) {
+      console.log(message, data);
+    } else {
+      console.log(message);
+    }
+    return;
+  }
+
+  // Se não estiver no modo sandbox, só mostrar logs essenciais
+  if (!SANDBOX_MODE) {
+    if (
+      message.includes('🚀') ||
+      message.includes('✅') ||
+      message.includes('📤')
+    ) {
+      if (data) {
+        console.log(message, data);
+      } else {
+        console.log(message);
+      }
+    }
+    return;
+  }
+
+  // Se estiver no modo sandbox, verificar se o número está autorizado
+  if (SANDBOX_NUMBERS.includes(phoneNumber)) {
+    if (data) {
+      console.log(`[SANDBOX] ${message}`, data);
+    } else {
+      console.log(`[SANDBOX] ${message}`);
+    }
+  }
+}
+
+/**
+ * Função helper para logs sempre visíveis (erros, health check, etc.)
+ * @param {string} message - Mensagem do log
+ * @param {any} data - Dados adicionais (opcional)
+ */
+function alwaysLog(message, data = null) {
+  if (data) {
+    console.log(message, data);
+  } else {
+    console.log(message);
+  }
+}
+
 /**
  * Classe para representar uma mensagem do DigiSac
  */
@@ -72,7 +136,7 @@ class DigiSacApi {
         payload.file = message.file;
       }
 
-      console.log('📤 Enviando mensagem DigiSac:', payload);
+      conditionalLog(message.to, '📤 Enviando mensagem DigiSac:', payload);
 
       const response = await axios.post(`${this.baseURL}/messages`, payload, {
         headers: this.headers,
@@ -161,12 +225,17 @@ class DigiSacApi {
    */
   async getContactProfile(phoneNumber) {
     try {
-      console.log('🔍 DigiSac API - Buscando contato:', phoneNumber);
-      console.log(
+      conditionalLog(
+        phoneNumber,
+        '🔍 DigiSac API - Buscando contato:',
+        phoneNumber
+      );
+      conditionalLog(
+        phoneNumber,
         '🔍 DigiSac API - URL:',
         `${this.baseURL}/contacts/${phoneNumber}`
       );
-      console.log('🔍 DigiSac API - Headers:', this.headers);
+      conditionalLog(phoneNumber, '🔍 DigiSac API - Headers:', this.headers);
 
       const response = await axios.get(
         `${this.baseURL}/contacts/${phoneNumber}`,
@@ -175,10 +244,18 @@ class DigiSacApi {
         }
       );
 
-      console.log('✅ DigiSac API - Resposta completa:');
-      console.log('📋 Status:', response.status);
-      console.log('📋 Headers:', JSON.stringify(response.headers, null, 2));
-      console.log('📦 Body:', JSON.stringify(response.data, null, 2));
+      conditionalLog(phoneNumber, '✅ DigiSac API - Resposta completa:');
+      conditionalLog(phoneNumber, '📋 Status:', response.status);
+      conditionalLog(
+        phoneNumber,
+        '📋 Headers:',
+        JSON.stringify(response.headers, null, 2)
+      );
+      conditionalLog(
+        phoneNumber,
+        '📦 Body:',
+        JSON.stringify(response.data, null, 2)
+      );
 
       return {
         success: true,
