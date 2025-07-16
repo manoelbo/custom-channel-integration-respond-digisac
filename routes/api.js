@@ -232,11 +232,27 @@ class DigiSacApi {
    */
   async getMessageWithFile(messageId) {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/messages/${messageId}?include[0]=file`,
-        {
-          headers: this.headers,
-        }
+      const url = `${this.baseURL}/messages/${messageId}?include[0]=file`;
+
+      console.log('🔍 [API DEBUG] Fazendo requisição para:', url);
+      console.log(
+        '🔍 [API DEBUG] Headers:',
+        JSON.stringify(this.headers, null, 2)
+      );
+
+      const response = await axios.get(url, {
+        headers: this.headers,
+      });
+
+      console.log('✅ [API DEBUG] Resposta recebida:');
+      console.log('📋 [API DEBUG] Status:', response.status);
+      console.log(
+        '📋 [API DEBUG] Headers:',
+        JSON.stringify(response.headers, null, 2)
+      );
+      console.log(
+        '📦 [API DEBUG] Body:',
+        JSON.stringify(response.data, null, 2)
       );
 
       return {
@@ -244,10 +260,17 @@ class DigiSacApi {
         data: response.data,
       };
     } catch (error) {
+      console.error('❌ [API DEBUG] Erro na requisição:');
+      console.error('📋 [API DEBUG] Status:', error.response?.status);
       console.error(
-        '❌ Erro ao buscar mensagem com arquivo:',
-        error.response?.data || error.message
+        '📋 [API DEBUG] Headers:',
+        JSON.stringify(error.response?.headers, null, 2)
       );
+      console.error(
+        '📦 [API DEBUG] Body:',
+        JSON.stringify(error.response?.data, null, 2)
+      );
+      console.error('📦 [API DEBUG] Error:', error.message);
 
       return {
         success: false,

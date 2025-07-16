@@ -590,19 +590,6 @@ router.post('/digisac/webhook', async (req, res) => {
       }
     }
 
-    // VÍDEOS: Ignorar completamente se não tiver arquivo
-    // O DigiSac não envia a URL do vídeo no webhook inicial, então não tentamos processar
-    if (
-      messageType === 'video' &&
-      (!messageData.file || !messageData.file.url)
-    ) {
-      conditionalLog(
-        contactPhoneNumber,
-        '⚠️ Webhook ignorado: vídeo sem arquivo (aguardando webhook com arquivo)'
-      );
-      return res.status(200).json({ status: 'ignored' });
-    }
-
     // VÍDEOS: Tentar buscar arquivo via API se não estiver disponível no webhook
     if (
       messageType === 'video' &&
