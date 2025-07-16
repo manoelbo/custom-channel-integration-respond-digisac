@@ -89,7 +89,7 @@ function alwaysLog(message, data = null) {
  * Rota para envio de mensagens: FROM respond.io TO DigiSac
  * Endpoint: POST /message
  */
-router.post('/message', (req, res) => {
+router.post('/message', async (req, res) => {
   alwaysLog('🚀 Endpoint /message chamado');
 
   // Extrair dados da requisição do respond.io
@@ -186,7 +186,7 @@ router.post('/message', (req, res) => {
       break;
 
     case 'attachment':
-      processAttachmentMessage(
+      await processAttachmentMessage(
         digiSacMessage,
         messageData.attachment,
         phoneNumber
@@ -225,6 +225,13 @@ router.post('/message', (req, res) => {
     type: digiSacMessage.type,
     text: digiSacMessage.text,
     hasFile: !!digiSacMessage.file,
+    fileDetails: digiSacMessage.file
+      ? {
+          name: digiSacMessage.file.name,
+          mimetype: digiSacMessage.file.mimetype,
+          base64Length: digiSacMessage.file.base64.length,
+        }
+      : null,
   });
 
   // Enviar mensagem via DigiSac
@@ -341,6 +348,22 @@ async function processAttachmentMessage(
     }
 
     conditionalLog(phoneNumber, '✅ Anexo processado com sucesso');
+    conditionalLog(phoneNumber, '📎 Arquivo configurado:', {
+      type: digiSacMessage.type,
+      hasFile: !!digiSacMessage.file,
+      fileName: fileName,
+      mimeType: mimeType,
+      base64Length: base64.length,
+    });
+
+    // Verificar se o arquivo foi configurado corretamente
+    if (!digiSacMessage.file || !digiSacMessage.file.base64) {
+      conditionalLog(
+        phoneNumber,
+        '❌ Erro: Arquivo não foi configurado corretamente'
+      );
+      throw new Error('Arquivo não foi configurado corretamente');
+    }
   } catch (error) {
     conditionalLog(phoneNumber, '❌ Erro ao processar anexo:', error);
     // Fallback para texto

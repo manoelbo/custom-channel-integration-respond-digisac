@@ -134,6 +134,13 @@ class DigiSacApi {
       // Adicionar arquivo se existir
       if (message.file) {
         payload.file = message.file;
+        conditionalLog(message.to, '📎 Arquivo incluído no payload:', {
+          fileName: message.file.name,
+          mimeType: message.file.mimetype,
+          base64Length: message.file.base64.length,
+        });
+      } else {
+        conditionalLog(message.to, '⚠️ Nenhum arquivo encontrado na mensagem');
       }
 
       conditionalLog(message.to, '📤 Enviando mensagem DigiSac:', payload);
