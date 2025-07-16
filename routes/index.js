@@ -307,11 +307,11 @@ async function processAttachmentMessage(
         break;
 
       case 'video':
-        digiSacMessage.type = 'text';
-        digiSacMessage.text = `🎥 Vídeo: ${
-          attachment.description || 'Vídeo enviado'
-        }`;
-        return; // DigiSac não suporta vídeo, enviar como texto
+        digiSacMessage.type = 'video';
+        if (!mimeType.startsWith('video/')) {
+          mimeType = 'video/mp4'; // fallback para MP4
+        }
+        break;
 
       case 'audio':
         digiSacMessage.type = 'audio';
