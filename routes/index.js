@@ -560,13 +560,13 @@ router.post('/digisac/webhook', async (req, res) => {
       return res.status(200).json({ status: 'ignored' });
     }
 
-    // Ignorar mensagens que enviamos (isFromMe: true)
-    if (messageData.isFromMe === true) {
+    // Processar mensagens enviadas pelos agentes como Messaging Echoes
+    const isFromMe = messageData.isFromMe === true;
+    if (isFromMe) {
       conditionalLog(
         contactPhoneNumber,
-        '⚠️ Webhook ignorado: mensagem enviada por nós'
+        '🔄 Processando mensagem do agente como Messaging Echo'
       );
-      return res.status(200).json({ status: 'ignored' });
     }
 
     // Só processar eventos de mensagem criada ou atualizada
@@ -721,7 +721,8 @@ router.post('/digisac/webhook', async (req, res) => {
               messageBody = '🖼️ Imagem';
               break;
             case 'video':
-              messageBody = '🎥 Vídeo';
+              messageBody =
+                '🎥 Vídeo: abrir no digisac ou no whatsapp para ver o vídeo';
               break;
             default:
               messageBody = `📎 Mídia (${messageType})`;
@@ -793,7 +794,7 @@ router.post('/digisac/webhook', async (req, res) => {
       contactId: contactPhoneNumber,
       events: [
         {
-          type: 'message',
+          type: isFromMe ? 'message_echo' : 'message',
           mId: messageId,
           timestamp: timestamp,
           message: processedMessage,
@@ -801,9 +802,41 @@ router.post('/digisac/webhook', async (req, res) => {
       ],
     };
 
+    // Adicionar informações do contato se disponíveis (para Messaging Echoes)
+    if (isFromMe) {
+      try {
+        const contactResult = await digiSacApi.getContactProfile(from);
+        if (contactResult.success && contactResult.data) {
+          const contactData = contactResult.data.data || contactResult.data;
+          webhookData.contact = {
+            firstName: contactData.firstName || contactData.name || '',
+            lastName: contactData.lastName || '',
+            profilePic: contactData.profilePic || contactData.avatar || '',
+            countryCode: contactData.countryCode || 'BR',
+            email: contactData.email || '',
+            phone: contactPhoneNumber,
+            language: contactData.language || 'pt-BR',
+          };
+          conditionalLog(
+            contactPhoneNumber,
+            '👤 Dados do contato adicionados para Messaging Echo:',
+            webhookData.contact
+          );
+        }
+      } catch (error) {
+        conditionalLog(
+          contactPhoneNumber,
+          '⚠️ Erro ao obter dados do contato para Messaging Echo:',
+          error.message
+        );
+      }
+    }
+
     conditionalLog(
       contactPhoneNumber,
-      '📤 Enviando para respond.io:',
+      `📤 Enviando para respond.io (${
+        isFromMe ? 'MESSAGING ECHO' : 'MESSAGE'
+      }):`,
       webhookData
     );
 
@@ -821,7 +854,7 @@ router.post('/digisac/webhook', async (req, res) => {
 
     conditionalLog(
       contactPhoneNumber,
-      '✅ Mensagem enviada para respond.io:',
+      `✅ ${isFromMe ? 'Messaging Echo' : 'Mensagem'} enviada para respond.io:`,
       respondIoResponse.status
     );
 
