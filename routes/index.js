@@ -195,10 +195,11 @@ async function processMessageSending(
 /**
  * Rota para envio de mensagens: FROM respond.io TO DigiSac
  * Endpoint: POST /message
+ * (DESATIVADA - fluxo multicanal agora é obrigatório)
  */
-router.post('/message', async (req, res) => {
-  await processMessageSending(req, res);
-});
+// router.post('/message', async (req, res) => {
+//   await processMessageSending(req, res);
+// });
 
 /**
  * Função helper para buscar configuração do canal
@@ -286,13 +287,29 @@ async function sendMessageWithChannelToken(
       );
     }
 
+    // Log do payload e headers
+    alwaysLog('[RESPOND.IO] Enviando POST para Respond.io', {
+      url: 'https://app.respond.io/custom/channel/webhook/',
+      channelId: channelService.channelId,
+      token: channelService.token,
+      contactId: contactPhoneNumber,
+      payload: webhookData,
+    });
+
     const response = await axios({
       method: 'post',
-      url:
-        channelService.baseURL ||
-        'https://app.respond.io/custom/channel/webhook/',
-      headers: channelService.headers,
+      url: 'https://app.respond.io/custom/channel/webhook/',
+      headers: {
+        authorization: `Bearer ${channelService.token}`,
+        'content-type': 'application/json',
+        'cache-control': 'no-cache',
+      },
       data: webhookData,
+    });
+
+    alwaysLog('[RESPOND.IO] Resposta do Respond.io', {
+      status: response.status,
+      data: response.data,
     });
 
     return {
@@ -301,6 +318,11 @@ async function sendMessageWithChannelToken(
       data: response.data,
     };
   } catch (error) {
+    errorLog('[RESPOND.IO] Erro ao enviar mensagem para Respond.io', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
     return {
       success: false,
       error: {
