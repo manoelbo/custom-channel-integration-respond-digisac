@@ -57,18 +57,18 @@ function formatPhoneForDisplay(phoneNumber) {
  */
 function formatTimestamp(timestamp) {
   if (!timestamp) {
-    return new Date().toISOString();
+    return Date.now();
   }
 
   if (typeof timestamp === 'number') {
-    return new Date(timestamp).toISOString();
+    return timestamp;
   }
 
   if (timestamp instanceof Date) {
-    return timestamp.toISOString();
+    return timestamp.getTime();
   }
 
-  return new Date(timestamp).toISOString();
+  return new Date(timestamp).getTime();
 }
 
 /**

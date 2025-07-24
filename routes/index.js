@@ -273,6 +273,9 @@ async function sendMessageWithChannelToken(
     // Usar o channelId específico do canal (sobrescrever o padrão)
     webhookData.channelId = channelService.channelId;
 
+    // Log para confirmar que o channelId foi sobrescrito
+    alwaysLog('[RESPOND.IO] ChannelId confirmado:', webhookData.channelId);
+
     // Adicionar informações do contato se fornecidas
     if (contactData) {
       webhookData.contact = formatContactForRespondIo(
@@ -294,6 +297,19 @@ async function sendMessageWithChannelToken(
       '[RESPOND.IO] Payload completo:',
       JSON.stringify(webhookData, null, 2)
     );
+
+    // Log comparativo com o curl que funciona
+    alwaysLog('[RESPOND.IO] Comparação com curl que funciona:');
+    alwaysLog('[RESPOND.IO] Headers enviados:', {
+      authorization: `Bearer ${channelService.token}`,
+      'content-type': 'application/json',
+      'cache-control': 'no-cache',
+    });
+    alwaysLog(
+      '[RESPOND.IO] URL:',
+      'https://app.respond.io/custom/channel/webhook/'
+    );
+    alwaysLog('[RESPOND.IO] Method:', 'POST');
 
     const response = await axios({
       method: 'post',
@@ -322,6 +338,50 @@ async function sendMessageWithChannelToken(
         status: response.status,
         data: response.data,
       });
+    }
+
+    // TESTE: Enviar payload idêntico ao curl que funciona
+    try {
+      const testPayload = {
+        channelId: channelService.channelId,
+        contactId: contactPhoneNumber,
+        events: [
+          {
+            type: 'message',
+            mId: messageId,
+            timestamp: timestamp,
+            message: {
+              type: 'text',
+              text: messageData.text || 'Teste idêntico ao curl',
+            },
+          },
+        ],
+      };
+
+      alwaysLog(
+        '[RESPOND.IO] TESTE - Payload idêntico ao curl:',
+        JSON.stringify(testPayload, null, 2)
+      );
+
+      const testResponse = await axios({
+        method: 'post',
+        url: 'https://app.respond.io/custom/channel/webhook/',
+        headers: {
+          authorization: `Bearer ${channelService.token}`,
+          'content-type': 'application/json',
+        },
+        data: testPayload,
+      });
+
+      alwaysLog('[RESPOND.IO] TESTE - Resposta do curl idêntico:', {
+        status: testResponse.status,
+        data: testResponse.data,
+      });
+    } catch (testError) {
+      errorLog(
+        '[RESPOND.IO] TESTE - Erro no curl idêntico:',
+        testError.message
+      );
     }
 
     // Enviar confirmação de status da mensagem
