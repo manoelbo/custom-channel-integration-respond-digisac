@@ -1,239 +1,36 @@
 /* eslint-disable new-cap */
 const express = require('express');
-const axios = require('axios');
 
 /**
- * DigiSac: API brasileira de mensageria WhatsApp
- * Documentação: https://documenter.getpostman.com/view/24605757/2sA3BhfaDg
+ * Importar módulos organizados
  */
 const {
-  DigiSacMessage,
-  DigiSacMessageCollection,
-  digiSacApi,
-  formatBrazilianPhoneNumber,
-  isValidBrazilianPhone,
-} = require('./api.js');
+  conditionalLog,
+  alwaysLog,
+  errorLog,
+  SANDBOX_MODE,
+  SANDBOX_NUMBERS,
+} = require('../utils/logger');
 
-/**
- * Respond.io custom channel API Token
- * Obtenha seu token em: https://docs.respond.io/messaging-channels/custom-channel
- */
-const CHANNEL_API_TOKEN = process.env.RESPOND_IO_TOKEN || '<API Token>';
+const {
+  formatErrorResponse,
+  formatSuccessResponse,
+} = require('../utils/formatters');
+
+const {
+  validateAuthentication,
+  validateMessageData,
+  validateDigiSacWebhook,
+} = require('../utils/validators');
+
+const { referaApiService } = require('../services/refera');
+const { digiSacApiService } = require('../services/digisac');
+const {
+  respondIoApiService,
+  CHANNEL_API_TOKEN,
+} = require('../services/respond');
 
 const router = express.Router();
-
-const SANDBOX_MODE = process.env.SANDBOX_MODE === 'true';
-const SANDBOX_NUMBERS = (process.env.SANDBOX_NUMBERS || '')
-  .split(',')
-  .map((n) => n.trim())
-  .filter(Boolean);
-
-/**
- * Função helper para logs condicionais
- * Só mostra logs detalhados quando estiver no modo sandbox e para números autorizados
- * @param {string} phoneNumber - Número de telefone
- * @param {string} message - Mensagem do log
- * @param {any} data - Dados adicionais (opcional)
- */
-function conditionalLog(phoneNumber, message, data = null) {
-  // Sempre mostrar logs de erro
-  if (message.includes('❌') || message.includes('⚠️')) {
-    if (data) {
-      console.log(message, data);
-    } else {
-      console.log(message);
-    }
-    return;
-  }
-
-  // Se não estiver no modo sandbox, só mostrar logs essenciais
-  if (!SANDBOX_MODE) {
-    if (
-      message.includes('🚀') ||
-      message.includes('✅') ||
-      message.includes('📤')
-    ) {
-      if (data) {
-        console.log(message, data);
-      } else {
-        console.log(message);
-      }
-    }
-    return;
-  }
-
-  // Se estiver no modo sandbox, verificar se o número está autorizado
-  if (SANDBOX_NUMBERS.includes(phoneNumber)) {
-    if (data) {
-      console.log(`[SANDBOX] ${message}`, data);
-    } else {
-      console.log(`[SANDBOX] ${message}`);
-    }
-  }
-}
-
-/**
- * Função helper para logs sempre visíveis (erros, health check, etc.)
- * @param {string} message - Mensagem do log
- * @param {any} data - Dados adicionais (opcional)
- */
-function alwaysLog(message, data = null) {
-  if (data) {
-    console.log(message, data);
-  } else {
-    console.log(message);
-  }
-}
-
-/**
- * Função para validar autenticação
- * @param {Object} req - Request object
- * @param {string} phoneNumber - Número de telefone para logs
- * @returns {Object} - { success: boolean, error?: Object }
- */
-function validateAuthentication(req, phoneNumber) {
-  const bearerToken = req.headers.authorization;
-  conditionalLog(phoneNumber, '🔑 Bearer token recebido:', bearerToken);
-  conditionalLog(
-    phoneNumber,
-    '🔑 CHANNEL_API_TOKEN configurado:',
-    CHANNEL_API_TOKEN
-  );
-
-  if (!bearerToken) {
-    alwaysLog('❌ Erro: Bearer token não encontrado');
-    return {
-      success: false,
-      error: {
-        status: 401,
-        message: '401: UNAUTHORIZED - Bearer token não encontrado',
-      },
-    };
-  }
-
-  const token = bearerToken.substring(7, bearerToken.length);
-  conditionalLog(phoneNumber, '🔑 Token extraído:', token);
-  conditionalLog(phoneNumber, '🔑 Token esperado:', CHANNEL_API_TOKEN);
-  conditionalLog(
-    phoneNumber,
-    '🔑 Tokens são iguais?',
-    token === CHANNEL_API_TOKEN
-  );
-
-  if (token !== CHANNEL_API_TOKEN) {
-    alwaysLog('❌ Erro: Token inválido');
-    return {
-      success: false,
-      error: {
-        status: 401,
-        message: '401: UNAUTHORIZED - Token inválido',
-      },
-    };
-  }
-
-  conditionalLog(phoneNumber, '✅ Autenticação bem-sucedida');
-  return { success: true };
-}
-
-/**
- * Função para validar dados da mensagem
- * @param {string} phoneNumber - Número de telefone
- * @param {Object} messageData - Dados da mensagem
- * @returns {Object} - { success: boolean, error?: Object }
- */
-function validateMessageData(phoneNumber, messageData) {
-  // Validar número de telefone brasileiro
-  if (!phoneNumber || !isValidBrazilianPhone(phoneNumber)) {
-    alwaysLog('❌ Erro: Número de telefone inválido:', phoneNumber);
-    return {
-      success: false,
-      error: {
-        status: 400,
-        message: 'Número de telefone brasileiro inválido',
-      },
-    };
-  }
-
-  // Validar mensagem
-  if (!messageData || !messageData.type) {
-    alwaysLog('❌ Erro: Dados da mensagem inválidos');
-    return {
-      success: false,
-      error: {
-        status: 400,
-        message: 'Dados da mensagem são obrigatórios',
-      },
-    };
-  }
-
-  conditionalLog(phoneNumber, '✅ Validações passaram');
-  return { success: true };
-}
-
-/**
- * Função para criar mensagem DigiSac
- * @param {string} phoneNumber - Número de telefone
- * @param {Object} messageData - Dados da mensagem
- * @param {string} serviceId - ID do serviço (opcional)
- * @param {string} userId - ID do usuário (opcional)
- * @returns {Promise<DigiSacMessage>} - Mensagem DigiSac criada
- */
-async function createDigiSacMessage(
-  phoneNumber,
-  messageData,
-  serviceId = null,
-  userId = null
-) {
-  // Criar mensagem DigiSac baseada no tipo
-  const digiSacMessage = new DigiSacMessage();
-  digiSacMessage.to = formatBrazilianPhoneNumber(phoneNumber);
-
-  // Usar service_id e user_id dos parâmetros se fornecidos
-  if (serviceId) {
-    digiSacMessage.service_id = serviceId;
-  }
-  if (userId) {
-    digiSacMessage.user_id = userId;
-  }
-
-  // Processar diferentes tipos de mensagem
-  switch (messageData.type) {
-    case 'text':
-      digiSacMessage.type = 'text';
-      digiSacMessage.text = messageData.text || '';
-      break;
-
-    case 'attachment':
-      await processAttachmentMessage(
-        digiSacMessage,
-        messageData.attachment,
-        phoneNumber
-      );
-      break;
-
-    case 'location':
-      digiSacMessage.type = 'text';
-      digiSacMessage.text = `📍 Localização: ${
-        messageData.address || 'Localização enviada'
-      }\nLatitude: ${messageData.latitude}\nLongitude: ${
-        messageData.longitude
-      }`;
-      break;
-
-    case 'quick_reply':
-      digiSacMessage.type = 'text';
-      const replies = messageData.replies?.join(', ') || 'Opções disponíveis';
-      digiSacMessage.text = `${
-        messageData.title || 'Selecione uma opção'
-      }\n\n${replies}`;
-      break;
-
-    default:
-      throw new Error(`Tipo de mensagem não suportado: ${messageData.type}`);
-  }
-
-  return digiSacMessage;
-}
 
 /**
  * Função para processar envio de mensagem
@@ -275,13 +72,20 @@ async function processMessageSending(
   }
 
   // Validar autenticação
-  const authResult = validateAuthentication(req, phoneNumber);
+  const authResult = respondIoApiService.validateAuthentication(
+    req,
+    phoneNumber
+  );
   if (!authResult.success) {
-    return res.status(authResult.error.status).json({
-      error: {
-        message: authResult.error.message,
-      },
-    });
+    return res
+      .status(authResult.error.status)
+      .json(
+        formatErrorResponse(
+          authResult.error.message,
+          null,
+          authResult.error.status
+        )
+      );
   }
 
   conditionalLog(phoneNumber, '📱 Número de telefone extraído:', phoneNumber);
@@ -294,21 +98,34 @@ async function processMessageSending(
   // Validar dados da mensagem
   const validationResult = validateMessageData(phoneNumber, messageData);
   if (!validationResult.success) {
-    return res.status(validationResult.error.status).json({
-      error: {
-        message: validationResult.error.message,
-      },
-    });
+    return res
+      .status(validationResult.error.status)
+      .json(
+        formatErrorResponse(
+          validationResult.error.message,
+          null,
+          validationResult.error.status
+        )
+      );
   }
 
   try {
     // Criar mensagem DigiSac
-    const digiSacMessage = await createDigiSacMessage(
+    const digiSacMessage = digiSacApiService.createMessage(
       phoneNumber,
       messageData,
       serviceId,
       userId
     );
+
+    // Processar anexo se existir
+    if (messageData.type === 'attachment' && messageData.attachment) {
+      await digiSacApiService.processAttachment(
+        digiSacMessage,
+        messageData.attachment,
+        phoneNumber
+      );
+    }
 
     conditionalLog(phoneNumber, '📤 Enviando mensagem para DigiSac:', {
       to: digiSacMessage.to,
@@ -327,7 +144,7 @@ async function processMessageSending(
     });
 
     // Enviar mensagem via DigiSac
-    const result = await digiSacApi.sendMessage(digiSacMessage);
+    const result = await digiSacApiService.sendMessage(digiSacMessage);
 
     conditionalLog(phoneNumber, '📤 Resultado do DigiSac:', result);
 
@@ -343,34 +160,35 @@ async function processMessageSending(
       });
     } else {
       // Erro - retornar erro detalhado
-      alwaysLog('❌ Erro do DigiSac:', result.error);
+      errorLog('❌ Erro do DigiSac:', result.error);
       const statusCode = result.error.code === 401 ? 401 : 400;
-      res.status(statusCode).json({
-        error: {
-          message: result.error.message,
-          details: result.error.details,
-        },
-      });
+      res
+        .status(statusCode)
+        .json(
+          formatErrorResponse(
+            result.error.message,
+            result.error.details,
+            statusCode
+          )
+        );
     }
   } catch (error) {
-    alwaysLog(`❌ Erro no endpoint ${routeName}:`, error);
+    errorLog(`❌ Erro no endpoint ${routeName}:`, error);
 
     // Verificar se é erro de tipo não suportado
     if (error.message.includes('Tipo de mensagem não suportado')) {
-      return res.status(400).json({
-        error: {
-          message: error.message,
+      return res.status(400).json(
+        formatErrorResponse(error.message, {
           supportedTypes: ['text', 'attachment', 'location', 'quick_reply'],
-        },
-      });
+        })
+      );
     }
 
-    res.status(500).json({
-      error: {
-        message: 'Erro interno do servidor',
-        details: error.message,
-      },
-    });
+    res
+      .status(500)
+      .json(
+        formatErrorResponse('Erro interno do servidor', error.message, 500)
+      );
   }
 }
 
@@ -388,224 +206,25 @@ router.post('/message', async (req, res) => {
  */
 router.post('/:channelID/message', async (req, res) => {
   const { channelID } = req.params;
-  console.log(`🔔 channelID recebido na rota: ${channelID}`);
+  alwaysLog(`🔔 channelID recebido na rota: ${channelID}`);
 
   try {
-    // Estruturar headers corretamente
-    const headers = {
-      'API-Key': process.env.REFERA_API_KEY,
-      Authorization: `Bearer ${process.env.REFERA_API_TOKEN}`,
-      Cookie: `csrftoken=${process.env.REFERA_CSRF_TOKEN}`,
-      'Content-Type': 'application/json',
-    };
+    const result = await referaApiService.processMessage(channelID, req.body);
 
-    console.log('🔧 Headers estruturados:', {
-      'API-Key': process.env.REFERA_API_KEY ? '***' : 'NÃO CONFIGURADO',
-      Authorization: process.env.REFERA_API_TOKEN ? '***' : 'NÃO CONFIGURADO',
-      Cookie: process.env.REFERA_CSRF_TOKEN ? '***' : 'NÃO CONFIGURADO',
-    });
-
-    // Fazer chamada para a API da Refera
-    const referaResponse = await axios({
-      method: 'get',
-      url: 'https://api.refera.com.br/api/v1/connections-message-tool/',
-      headers: headers,
-      data: {
-        channelID: channelID,
-        // Adicionar outros dados se necessário
-        ...req.body,
-      },
-    });
-
-    console.log('✅ Requisição para API da Refera bem-sucedida');
-    console.log('📋 Status da resposta:', referaResponse.status);
-    console.log(
-      '📦 Dados estruturados:',
-      JSON.stringify(referaResponse.data, null, 2)
-    );
-
-    res.json({
-      status: 'success',
-      message: 'Requisição para API da Refera realizada com sucesso',
-      channelID: channelID,
-      referaResponse: {
-        status: referaResponse.status,
-        data: referaResponse.data,
-      },
-    });
+    if (result.status === 'success') {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
   } catch (error) {
-    console.error('❌ Erro na requisição para API da Refera:', error.message);
-    console.error('📋 Status do erro:', error.response?.status);
-    console.error('📦 Dados do erro:', error.response?.data);
-
-    res.status(500).json({
-      status: 'error',
-      message: 'Erro na requisição para API da Refera',
-      channelID: channelID,
-      error: {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-      },
-    });
+    errorLog('❌ Erro na rota com channelID:', error);
+    res
+      .status(500)
+      .json(
+        formatErrorResponse('Erro interno do servidor', error.message, 500)
+      );
   }
 });
-
-/**
- * Processar mensagem de anexo (attachment)
- * @param {DigiSacMessage} digiSacMessage - Mensagem DigiSac
- * @param {Object} attachment - Dados do anexo do respond.io
- */
-async function processAttachmentMessage(
-  digiSacMessage,
-  attachment,
-  phoneNumber
-) {
-  try {
-    conditionalLog(phoneNumber, '📎 Processando anexo:', attachment);
-
-    // Baixar o arquivo da URL
-    const fileResponse = await axios.get(attachment.url, {
-      responseType: 'arraybuffer',
-    });
-
-    // Converter para base64
-    const base64 = Buffer.from(fileResponse.data).toString('base64');
-
-    // Determinar o tipo de arquivo baseado no attachment.type
-    let mimeType = attachment.mimeType || 'application/octet-stream';
-    let fileName = attachment.fileName || 'arquivo';
-
-    switch (attachment.type) {
-      case 'image':
-        digiSacMessage.type = 'image';
-        if (!mimeType.startsWith('image/')) {
-          mimeType = 'image/jpeg'; // fallback
-        }
-        break;
-
-      case 'video':
-        digiSacMessage.type = 'video';
-        if (!mimeType.startsWith('video/')) {
-          mimeType = 'video/mp4'; // fallback para MP4
-        }
-        break;
-
-      case 'audio':
-        digiSacMessage.type = 'audio';
-        if (!mimeType.startsWith('audio/')) {
-          mimeType = 'audio/mpeg'; // fallback
-        }
-        break;
-
-      case 'file':
-        digiSacMessage.type = 'document';
-        if (!mimeType.startsWith('application/')) {
-          mimeType = 'application/pdf'; // fallback
-        }
-        break;
-
-      default:
-        digiSacMessage.type = 'text';
-        digiSacMessage.text = `📎 Arquivo: ${
-          attachment.description || 'Arquivo enviado'
-        }`;
-        return;
-    }
-
-    // Configurar o arquivo
-    digiSacMessage.file = {
-      base64: base64,
-      mimetype: mimeType,
-      name: fileName,
-    };
-
-    // Adicionar texto - usar descrição se existir, senão usar nome do arquivo
-    if (attachment.description && attachment.description.trim() !== '') {
-      digiSacMessage.text = attachment.description;
-    } else {
-      digiSacMessage.text = fileName;
-    }
-
-    conditionalLog(phoneNumber, '✅ Anexo processado com sucesso');
-    conditionalLog(phoneNumber, '📎 Arquivo configurado:', {
-      type: digiSacMessage.type,
-      hasFile: !!digiSacMessage.file,
-      fileName: fileName,
-      mimeType: mimeType,
-      base64Length: base64.length,
-    });
-
-    // Verificar se o arquivo foi configurado corretamente
-    if (!digiSacMessage.file || !digiSacMessage.file.base64) {
-      conditionalLog(
-        phoneNumber,
-        '❌ Erro: Arquivo não foi configurado corretamente'
-      );
-      throw new Error('Arquivo não foi configurado corretamente');
-    }
-  } catch (error) {
-    conditionalLog(phoneNumber, '❌ Erro ao processar anexo:', error);
-    // Fallback para texto
-    digiSacMessage.type = 'text';
-    digiSacMessage.text = `📎 Erro ao processar anexo: ${
-      attachment.description || 'Arquivo não pôde ser processado'
-    }`;
-  }
-}
-
-/**
- * Função para processar arquivos recebidos do DigiSac
- * @param {Object} messageData - Dados da mensagem do DigiSac
- * @param {string} phoneNumber - Número de telefone
- * @returns {Object} - Dados da mensagem processada para respond.io
- */
-
-async function processDigiSacFile(messageData, phoneNumber) {
-  const file = messageData.file;
-
-  // Esta verificação já é feita antes de chamar esta função
-  if (!file || !file.url) {
-    return null;
-  }
-
-  try {
-    conditionalLog(phoneNumber, '📎 Processando arquivo do DigiSac:', {
-      fileName: file.name,
-      mimeType: file.mimetype,
-      url: file.url,
-    });
-
-    // Determinar o tipo de mensagem baseado no MIME type
-    let attachmentType = 'file';
-
-    if (file.mimetype.startsWith('image/')) {
-      attachmentType = 'image';
-    } else if (file.mimetype.startsWith('audio/')) {
-      attachmentType = 'audio';
-    } else if (file.mimetype.startsWith('video/')) {
-      attachmentType = 'video';
-    } else if (file.mimetype === 'application/pdf') {
-      attachmentType = 'file';
-    } else {
-      attachmentType = 'file';
-    }
-
-    return {
-      type: 'attachment',
-      attachment: {
-        type: attachmentType,
-        url: file.url, // Usar URL diretamente do DigiSac
-        fileName: file.name,
-        mimeType: file.mimetype,
-        description: file.name, // Usar nome do arquivo como descrição
-      },
-    };
-  } catch (error) {
-    conditionalLog(phoneNumber, '❌ Erro ao processar arquivo:', error.message);
-    return null;
-  }
-}
 
 /**
  * Rota para recebimento de mensagens: FROM DigiSac TO respond.io
@@ -616,6 +235,14 @@ router.post('/digisac/webhook', async (req, res) => {
     // Verificar se é um evento de mensagem relevante
     const eventType = req.body.event;
     let messageData = req.body.data;
+
+    // Validar dados do webhook
+    const webhookValidation = validateDigiSacWebhook(req.body);
+    if (!webhookValidation.success) {
+      return res
+        .status(400)
+        .json(formatErrorResponse(webhookValidation.error.message, null, 400));
+    }
 
     // Se messageData for um array, pegar apenas a primeira mensagem
     if (Array.isArray(messageData)) {
@@ -643,7 +270,7 @@ router.post('/digisac/webhook', async (req, res) => {
     let contactPhoneNumber = null;
     try {
       conditionalLog(from, '🔍 Buscando dados do contato:', from);
-      const contactResult = await digiSacApi.getContactProfile(from);
+      const contactResult = await digiSacApiService.getContactProfile(from);
       if (contactResult.success && contactResult.data) {
         contactPhoneNumber =
           contactResult.data.data?.number ||
@@ -783,7 +410,7 @@ router.post('/digisac/webhook', async (req, res) => {
 
       try {
         // Buscar mensagem com arquivo incluído
-        const result = await digiSacApi.getMessageWithFile(messageId);
+        const result = await digiSacApiService.getMessageWithFile(messageId);
 
         if (result.success && result.data) {
           conditionalLog(
@@ -808,7 +435,9 @@ router.post('/digisac/webhook', async (req, res) => {
             // Aguardar mais um pouco e tentar novamente
             await new Promise((resolve) => setTimeout(resolve, 5000)); // +5 segundos
 
-            const retryResult = await digiSacApi.getMessageWithFile(messageId);
+            const retryResult = await digiSacApiService.getMessageWithFile(
+              messageId
+            );
             if (retryResult.success && retryResult.data) {
               conditionalLog(
                 contactPhoneNumber,
@@ -855,100 +484,17 @@ router.post('/digisac/webhook', async (req, res) => {
       timestamp,
     });
 
-    // Processar mensagem baseada no tipo
-    let messageBody = '';
-    let processedMessage = null;
-
-    // Para mensagens do tipo 'chat', o texto está diretamente no campo 'text'
-    if (messageType === 'chat' || messageType === 'text') {
-      messageBody =
-        messageData.text ||
-        messageData.body ||
-        messageData.message ||
-        messageData.content ||
-        '';
-
-      processedMessage = {
-        type: 'text',
-        text: messageBody,
-      };
-    } else {
-      // Para tipos de mídia, sempre tentar processar como attachment
-      if (
-        ['image', 'audio', 'ptt', 'document', 'video'].includes(messageType)
-      ) {
-        conditionalLog(contactPhoneNumber, '📎 Processando mídia do DigiSac');
-        processedMessage = await processDigiSacFile(
-          messageData,
-          contactPhoneNumber
-        );
-
-        if (processedMessage) {
-          messageBody = `📎 ${processedMessage.attachment.fileName}`;
-        } else {
-          // Fallback se não conseguir processar
-          switch (messageType) {
-            case 'document':
-              messageBody = `📄 Documento: arquivo`;
-              break;
-            case 'ptt':
-            case 'audio':
-              messageBody = '🎵 Mensagem de áudio';
-              break;
-            case 'image':
-              messageBody = '🖼️ Imagem';
-              break;
-            case 'video':
-              messageBody =
-                '🎥 Vídeo: abrir no digisac ou no whatsapp para ver o vídeo';
-              break;
-            default:
-              messageBody = `📎 Mídia (${messageType})`;
-          }
-
-          processedMessage = {
-            type: 'text',
-            text: messageBody,
-          };
-        }
-      } else {
-        // Para outros tipos (location, contact, sticker), usar texto
-        switch (messageType) {
-          case 'location':
-            messageBody = '📍 Localização';
-            break;
-          case 'contact':
-            messageBody = '👤 Contato';
-            break;
-          case 'sticker':
-            messageBody = '😀 Sticker';
-            break;
-          default:
-            messageBody = `📎 Mídia (${messageType})`;
-        }
-
-        processedMessage = {
-          type: 'text',
-          text: messageBody,
-        };
-      }
-    }
-
-    conditionalLog(
-      contactPhoneNumber,
-      '🔍 Message Body extraído:',
-      messageBody
-    );
-
-    conditionalLog(
-      contactPhoneNumber,
-      '🔍 Mensagem processada:',
-      processedMessage
-    );
+    // Processar mensagem usando o serviço do Respond.io
+    const { messageBody, processedMessage } =
+      respondIoApiService.processDigiSacMessage(
+        messageData,
+        messageType,
+        contactPhoneNumber
+      );
 
     // Validar dados essenciais
     if (!messageId || !from) {
-      alwaysLog('❌ Webhook DigiSac: dados incompletos', {
+      errorLog('❌ Webhook DigiSac: dados incompletos', {
         messageId,
         from,
         messageType,
@@ -966,39 +512,28 @@ router.post('/digisac/webhook', async (req, res) => {
       messageBody = `📎 Mídia (${messageType})`;
     }
 
-    // Preparar dados para envio ao respond.io
-    const webhookData = {
-      channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
-      contactId: contactPhoneNumber,
-      events: [
-        {
-          type: isFromMe ? 'message_echo' : 'message',
-          mId: messageId,
-          timestamp: timestamp,
-          message: processedMessage,
-        },
-      ],
-    };
-
-    // Adicionar informações do contato se disponíveis (para Messaging Echoes)
+    // Enviar para o Respond.io
+    let respondResult;
     if (isFromMe) {
+      // Para Messaging Echoes, tentar obter dados do contato
       try {
-        const contactResult = await digiSacApi.getContactProfile(from);
+        const contactResult = await digiSacApiService.getContactProfile(from);
         if (contactResult.success && contactResult.data) {
           const contactData = contactResult.data.data || contactResult.data;
-          webhookData.contact = {
-            firstName: contactData.firstName || contactData.name || '',
-            lastName: contactData.lastName || '',
-            profilePic: contactData.profilePic || contactData.avatar || '',
-            countryCode: contactData.countryCode || 'BR',
-            email: contactData.email || '',
-            phone: contactPhoneNumber,
-            language: contactData.language || 'pt-BR',
-          };
-          conditionalLog(
+          respondResult = await respondIoApiService.sendMessageWithContact(
+            processedMessage,
+            messageId,
             contactPhoneNumber,
-            '👤 Dados do contato adicionados para Messaging Echo:',
-            webhookData.contact
+            timestamp,
+            contactData
+          );
+        } else {
+          respondResult = await respondIoApiService.sendMessage(
+            processedMessage,
+            messageId,
+            contactPhoneNumber,
+            timestamp,
+            true // isFromMe
           );
         }
       } catch (error) {
@@ -1007,49 +542,37 @@ router.post('/digisac/webhook', async (req, res) => {
           '⚠️ Erro ao obter dados do contato para Messaging Echo:',
           error.message
         );
+        respondResult = await respondIoApiService.sendMessage(
+          processedMessage,
+          messageId,
+          contactPhoneNumber,
+          timestamp,
+          true // isFromMe
+        );
       }
+    } else {
+      respondResult = await respondIoApiService.sendMessage(
+        processedMessage,
+        messageId,
+        contactPhoneNumber,
+        timestamp,
+        false // isFromMe
+      );
     }
 
-    conditionalLog(
-      contactPhoneNumber,
-      `📤 Enviando para respond.io (${
-        isFromMe ? 'MESSAGING ECHO' : 'MESSAGE'
-      }):`,
-      webhookData
-    );
-
-    // Enviar para o webhook do respond.io
-    const respondIoResponse = await axios({
-      method: 'post',
-      url: 'https://app.respond.io/custom/channel/webhook/',
-      headers: {
-        authorization: `Bearer ${CHANNEL_API_TOKEN}`,
-        'content-type': 'application/json',
-        'cache-control': 'no-cache',
-      },
-      data: webhookData,
-    });
-
-    conditionalLog(
-      contactPhoneNumber,
-      `✅ ${isFromMe ? 'Messaging Echo' : 'Mensagem'} enviada para respond.io:`,
-      respondIoResponse.status
-    );
-
     // Responder ao DigiSac que recebemos o webhook
-    res.status(200).json({
-      status: 'success',
-      message: 'Webhook processado com sucesso',
-    });
+    res
+      .status(200)
+      .json(formatSuccessResponse(null, 'Webhook processado com sucesso'));
   } catch (error) {
-    alwaysLog('❌ Erro no webhook DigiSac:', error);
+    errorLog('❌ Erro no webhook DigiSac:', error);
 
     // Mesmo com erro, responder 200 ao DigiSac para evitar reenvios
-    res.status(200).json({
-      status: 'error',
-      message: 'Erro ao processar webhook',
-      error: error.message,
-    });
+    res
+      .status(200)
+      .json(
+        formatErrorResponse('Erro ao processar webhook', error.message, 500)
+      );
   }
 });
 
@@ -1062,20 +585,24 @@ router.get('/message/:messageId/status', async (req, res) => {
     const { messageId } = req.params;
 
     // Verificar autenticação
-    const bearerToken = req.headers.authorization;
-    if (
-      !bearerToken ||
-      bearerToken.substring(7, bearerToken.length) !== CHANNEL_API_TOKEN
-    ) {
-      return res.status(401).json({
-        error: {
-          message: '401: UNAUTHORIZED',
-        },
-      });
+    const authResult = respondIoApiService.validateAuthentication(
+      req,
+      'system'
+    );
+    if (!authResult.success) {
+      return res
+        .status(authResult.error.status)
+        .json(
+          formatErrorResponse(
+            authResult.error.message,
+            null,
+            authResult.error.status
+          )
+        );
     }
 
     // Consultar status na API DigiSac
-    const result = await digiSacApi.getMessageStatus(messageId);
+    const result = await digiSacApiService.getMessageStatus(messageId);
 
     if (result.success) {
       res.json({
@@ -1084,20 +611,21 @@ router.get('/message/:messageId/status', async (req, res) => {
         timestamp: result.data.timestamp,
       });
     } else {
-      res.status(404).json({
-        error: {
-          message: 'Mensagem não encontrada',
-          details: result.error.message,
-        },
-      });
+      res
+        .status(404)
+        .json(
+          formatErrorResponse(
+            'Mensagem não encontrada',
+            result.error.message,
+            404
+          )
+        );
     }
   } catch (error) {
-    alwaysLog('❌ Erro ao verificar status:', error);
-    res.status(500).json({
-      error: {
-        message: 'Erro interno do servidor',
-      },
-    });
+    errorLog('❌ Erro ao verificar status:', error);
+    res
+      .status(500)
+      .json(formatErrorResponse('Erro interno do servidor', null, 500));
   }
 });
 
@@ -1111,6 +639,13 @@ router.get('/health', (req, res) => {
     service: 'DigiSac ↔ Respond.io Bridge',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
+    config: {
+      digiSac: digiSacApiService.getConfigInfo
+        ? digiSacApiService.getConfigInfo()
+        : 'N/A',
+      respondIo: respondIoApiService.getConfigInfo(),
+      refera: referaApiService.getConfigInfo(),
+    },
   });
 });
 
