@@ -814,9 +814,14 @@ router.post('/digisac/webhook', async (req, res) => {
         let respondResult;
 
         if (isFromMe) {
-          conditionalLog(
-            contactPhoneNumber,
-            `🔄 [CANAL ${channelConfig.custom_channel_id}] Processando echo do vendedor ${channelConfig.desc}`
+          alwaysLog(
+            `[WEBHOOK][ECHO] Enviando echo do vendedor para canal Respond.io`,
+            {
+              canal: channelConfig.custom_channel_id,
+              vendedor: channelConfig.desc,
+              contactId: contactPhoneNumber,
+              texto: processedMessage.text,
+            }
           );
 
           // Para Messaging Echoes, tentar obter dados do contato
@@ -849,7 +854,7 @@ router.post('/digisac/webhook', async (req, res) => {
           } catch (error) {
             conditionalLog(
               contactPhoneNumber,
-              '⚠️ Erro ao obter dados do contato para Messaging Echo:',
+              '[ECHO] Erro ao obter dados do contato para Messaging Echo:',
               error.message
             );
             respondResult = await sendMessageWithChannelToken(
@@ -863,9 +868,14 @@ router.post('/digisac/webhook', async (req, res) => {
             );
           }
         } else {
-          conditionalLog(
-            contactPhoneNumber,
-            `📨 [CANAL ${channelConfig.custom_channel_id}] Mensagem do cliente para vendedor ${channelConfig.desc}`
+          alwaysLog(
+            `[WEBHOOK] Enviando mensagem do DigiSac para canal Respond.io`,
+            {
+              canal: channelConfig.custom_channel_id,
+              vendedor: channelConfig.desc,
+              contactId: contactPhoneNumber,
+              texto: processedMessage.text,
+            }
           );
 
           respondResult = await sendMessageWithChannelToken(
@@ -881,16 +891,23 @@ router.post('/digisac/webhook', async (req, res) => {
 
         // Log do resultado para este canal
         if (respondResult && respondResult.success) {
-          conditionalLog(
-            contactPhoneNumber,
-            `✅ [CANAL ${channelConfig.custom_channel_id}] Mensagem entregue para ${channelConfig.desc}`
-          );
+          alwaysLog(`[WEBHOOK] Mensagem entregue para canal/vendedor`, {
+            canal: channelConfig.custom_channel_id,
+            vendedor: channelConfig.desc,
+            contactId: contactPhoneNumber,
+            isEcho: isFromMe,
+            messageId,
+          });
           successCount++;
         } else {
-          errorLog(
-            `❌ [CANAL ${channelConfig.custom_channel_id}] Erro ao entregar mensagem para ${channelConfig.desc}:`,
-            respondResult?.error
-          );
+          errorLog(`[WEBHOOK] Erro ao entregar mensagem para canal/vendedor`, {
+            canal: channelConfig.custom_channel_id,
+            vendedor: channelConfig.desc,
+            contactId: contactPhoneNumber,
+            isEcho: isFromMe,
+            messageId,
+            error: respondResult?.error,
+          });
           errorCount++;
         }
 
@@ -901,10 +918,14 @@ router.post('/digisac/webhook', async (req, res) => {
           error: respondResult?.error || null,
         });
       } catch (error) {
-        errorLog(
-          `❌ [CANAL ${channelConfig.custom_channel_id}] Erro crítico ao processar canal ${channelConfig.desc}:`,
-          error
-        );
+        errorLog(`[WEBHOOK] Erro crítico ao processar canal/vendedor`, {
+          canal: channelConfig.custom_channel_id,
+          vendedor: channelConfig.desc,
+          contactId: contactPhoneNumber,
+          isEcho: isFromMe,
+          messageId,
+          error: error.message,
+        });
         errorCount++;
         allResults.push({
           channelId: channelConfig.custom_channel_id,
@@ -916,7 +937,7 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     // Log do resumo final
-    alwaysLog(`📊 [SERVICE ${serviceId}] Resumo do processamento:`, {
+    alwaysLog(`[WEBHOOK][SERVICE ${serviceId}] Resumo do processamento:`, {
       totalCanais: channelConfigs.length,
       sucessos: successCount,
       erros: errorCount,
