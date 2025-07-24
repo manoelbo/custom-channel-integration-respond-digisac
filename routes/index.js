@@ -4,13 +4,7 @@ const express = require('express');
 /**
  * Importar módulos organizados
  */
-const {
-  conditionalLog,
-  alwaysLog,
-  errorLog,
-  SANDBOX_MODE,
-  SANDBOX_NUMBERS,
-} = require('../utils/logger');
+const { conditionalLog, alwaysLog, errorLog } = require('../utils/logger');
 
 const {
   formatErrorResponse,
@@ -677,27 +671,7 @@ router.post('/digisac/webhook', async (req, res) => {
       contactPhoneNumber
     );
 
-    // SANDBOX: APLICAR FILTRO DE NÚMEROS NO INÍCIO
-    // Só processa se o número estiver na lista de teste
-    if (SANDBOX_MODE) {
-      if (!SANDBOX_NUMBERS.includes(contactPhoneNumber)) {
-        conditionalLog(
-          contactPhoneNumber,
-          '⚠️ [SANDBOX] Mensagem ignorada. Número não está na lista de teste:',
-          contactPhoneNumber
-        );
-        return res.status(200).json({
-          status: 'sandbox_ignored',
-          message: 'Número não autorizado para teste.',
-        });
-      } else {
-        conditionalLog(
-          contactPhoneNumber,
-          '✅ [SANDBOX] Número autorizado para teste:',
-          contactPhoneNumber
-        );
-      }
-    }
+    // Removido filtro SANDBOX - agora processa todas as mensagens
 
     // Log detalhado da estrutura completa do webhook (só para números autorizados)
     conditionalLog(
@@ -886,7 +860,7 @@ router.post('/digisac/webhook', async (req, res) => {
       try {
         // Criar instância temporária do serviço Respond.io com token do canal
         const channelRespondService = {
-          ...respondIoApiService,
+          baseURL: 'https://app.respond.io/custom/channel/webhook/',
           token: channelConfig.custom_channel_token,
           channelId: channelConfig.custom_channel_id,
           headers: {
