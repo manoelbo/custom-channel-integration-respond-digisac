@@ -389,7 +389,58 @@ router.post('/message', async (req, res) => {
 router.post('/:channelID/message', async (req, res) => {
   const { channelID } = req.params;
   console.log(`🔔 channelID recebido na rota: ${channelID}`);
-  res.json({ status: 'ok', channelID });
+
+  try {
+    // Fazer chamada para a API da Refera
+    const referaResponse = await axios({
+      method: 'post',
+      url: 'https://api.refera.com.br/api/v1/connections-message-tool/',
+      headers: {
+        'API-Key':
+          '6b525d25cc30f5311d89b453f7d8bb0925438944362ac7c518fb37a5547beaa2',
+        Authorization: `Bearer ${process.env.REFERA_API_TOKEN}`,
+        Cookie: `csrftoken=${process.env.REFERA_CSRF_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      data: {
+        channelID: channelID,
+        // Adicionar outros dados se necessário
+        ...req.body,
+      },
+    });
+
+    console.log('✅ Requisição para API da Refera bem-sucedida');
+    console.log('📋 Status da resposta:', referaResponse.status);
+    console.log(
+      '📦 Dados estruturados:',
+      JSON.stringify(referaResponse.data, null, 2)
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Requisição para API da Refera realizada com sucesso',
+      channelID: channelID,
+      referaResponse: {
+        status: referaResponse.status,
+        data: referaResponse.data,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Erro na requisição para API da Refera:', error.message);
+    console.error('📋 Status do erro:', error.response?.status);
+    console.error('📦 Dados do erro:', error.response?.data);
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Erro na requisição para API da Refera',
+      channelID: channelID,
+      error: {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      },
+    });
+  }
 });
 
 /**
