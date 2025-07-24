@@ -275,7 +275,7 @@ const dataMockup = {
     {
       id: 99,
       desc: 'Manoel (Teste)',
-      phone: '554831810217',
+      phone: '554896227411',
       comunication_tool: 'Respond.io (Custom Channel Digisac)',
       role: [],
       type: 'whatsapp',
@@ -285,7 +285,7 @@ const dataMockup = {
       custom_channel_id: '197ebddcc3d4d5b5512e980321177c6',
       custom_channel_token:
         'ec0afa435d5e4a4b5a1b712c885f7bfcf700906e9e4bd2d802cefd84bfe9fea5',
-      digisac_service_id: '6e9aab4c-94fd-47e0-99f2-06ae04caaa0c',
+      digisac_service_id: '8ae3028e-095a-4b72-b868-4f8a7cae9b4c',
       digisac_user_id: 'c3c4de37-afc8-4be0-96a8-4f1f606eeea3',
     },
   ],
