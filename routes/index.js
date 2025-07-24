@@ -209,13 +209,53 @@ router.post('/:channelID/message', async (req, res) => {
   alwaysLog(`🔔 channelID recebido na rota: ${channelID}`);
 
   try {
-    const result = await referaApiService.processMessage(channelID, req.body);
+    // FASE PROVISÓRIA: Usar dataMockup enquanto a API da Refera não é atualizada
+    const dataMockup = require('../utils/dataMockup');
 
-    if (result.status === 'success') {
-      res.json(result);
+    // Buscar item no dataMockup com custom_channel_id igual ao channelID
+    const mockupItem = dataMockup.results.find(
+      (item) => item.custom_channel_id === channelID
+    );
+
+    if (mockupItem) {
+      alwaysLog('✅ Item encontrado no dataMockup:', {
+        desc: mockupItem.desc,
+        custom_channel_id: mockupItem.custom_channel_id,
+        phone: mockupItem.phone,
+      });
+
+      // Retornar dados do item encontrado
+      res.json({
+        status: 'success',
+        message: 'Dados encontrados no mockup (fase provisória)',
+        data: {
+          desc: mockupItem.desc,
+          custom_channel_id: mockupItem.custom_channel_id,
+          phone: mockupItem.phone,
+          digisac_service_id: mockupItem.digisac_service_id,
+          digisac_user_id: mockupItem.digisac_user_id,
+        },
+      });
     } else {
-      res.status(500).json(result);
+      alwaysLog(
+        '❌ Item não encontrado no dataMockup para channelID:',
+        channelID
+      );
+
+      res.status(404).json({
+        status: 'error',
+        message: 'Channel ID não encontrado no mockup',
+        channelID: channelID,
+      });
     }
+
+    // TODO: Quando a API da Refera for atualizada, descomentar o código abaixo
+    // const result = await referaApiService.processMessage(channelID, req.body);
+    // if (result.status === 'success') {
+    //   res.json(result);
+    // } else {
+    //   res.status(500).json(result);
+    // }
   } catch (error) {
     errorLog('❌ Erro na rota com channelID:', error);
     res
