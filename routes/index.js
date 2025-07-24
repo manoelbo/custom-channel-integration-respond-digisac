@@ -276,7 +276,7 @@ async function sendMessageWithChannelToken(
       isFromMe
     );
 
-    // Usar o channelId específico do canal
+    // Usar o channelId específico do canal (sobrescrever o padrão)
     webhookData.channelId = channelService.channelId;
 
     // Adicionar informações do contato se fornecidas
@@ -293,8 +293,13 @@ async function sendMessageWithChannelToken(
       channelId: channelService.channelId,
       token: channelService.token,
       contactId: contactPhoneNumber,
-      payload: webhookData,
     });
+
+    // Log detalhado do payload
+    alwaysLog(
+      '[RESPOND.IO] Payload completo:',
+      JSON.stringify(webhookData, null, 2)
+    );
 
     const response = await axios({
       method: 'post',
@@ -310,7 +315,65 @@ async function sendMessageWithChannelToken(
     alwaysLog('[RESPOND.IO] Resposta do Respond.io', {
       status: response.status,
       data: response.data,
+      headers: response.headers,
     });
+
+    // Log adicional para debug
+    if (response.status === 200) {
+      alwaysLog(
+        '[RESPOND.IO] Mensagem enviada com sucesso. Verificando se foi processada...'
+      );
+    } else {
+      errorLog('[RESPOND.IO] Erro na resposta do Respond.io:', {
+        status: response.status,
+        data: response.data,
+      });
+    }
+
+    // Enviar confirmação de status da mensagem
+    try {
+      const statusPayload = {
+        channelId: channelService.channelId,
+        contactId: contactPhoneNumber,
+        events: [
+          {
+            type: 'message_status',
+            mId: messageId,
+            timestamp: timestamp,
+            status: {
+              value: 'delivered',
+              message: 'Message delivered successfully',
+            },
+          },
+        ],
+      };
+
+      alwaysLog(
+        '[RESPOND.IO] Enviando confirmação de status:',
+        JSON.stringify(statusPayload, null, 2)
+      );
+
+      const statusResponse = await axios({
+        method: 'post',
+        url: 'https://app.respond.io/custom/channel/webhook/',
+        headers: {
+          authorization: `Bearer ${channelService.token}`,
+          'content-type': 'application/json',
+          'cache-control': 'no-cache',
+        },
+        data: statusPayload,
+      });
+
+      alwaysLog('[RESPOND.IO] Confirmação de status enviada:', {
+        status: statusResponse.status,
+        data: statusResponse.data,
+      });
+    } catch (statusError) {
+      errorLog(
+        '[RESPOND.IO] Erro ao enviar confirmação de status:',
+        statusError.message
+      );
+    }
 
     return {
       success: true,
