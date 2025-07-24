@@ -227,6 +227,19 @@ function getChannelByServiceAndUser(serviceId, userId) {
 }
 
 /**
+ * Função helper para buscar TODOS os canais por service_id (para webhooks)
+ * Um service_id pode ter múltiplos canais (custom_channel_id diferentes)
+ * @param {string} serviceId - ID do serviço DigiSac
+ * @returns {Array} - Array de configurações de canais
+ */
+function getChannelsByServiceId(serviceId) {
+  const dataMockup = require('../utils/dataMockup');
+  return dataMockup.results.filter(
+    (item) => item.digisac_service_id === serviceId
+  );
+}
+
+/**
  * Função para enviar mensagem para Respond.io com token específico do canal
  * @param {Object} channelService - Configuração do serviço do canal
  * @param {Object} messageData - Dados da mensagem
@@ -504,36 +517,33 @@ router.post('/digisac/webhook', async (req, res) => {
       ? new Date(messageData.timestamp).getTime()
       : Date.now();
 
-    // Extrair service_id e user_id da mensagem para identificar o canal
+    // Extrair service_id da mensagem para identificar os canais
     const serviceId = messageData.service_id || messageData.serviceId;
-    const userId = messageData.user_id || messageData.userId;
 
-    // Buscar configuração do canal baseado no service_id e user_id
-    let channelConfig = null;
-    if (serviceId && userId) {
-      channelConfig = getChannelByServiceAndUser(serviceId, userId);
+    // Buscar TODOS os canais que usam este service_id
+    let channelConfigs = [];
+    if (serviceId) {
+      channelConfigs = getChannelsByServiceId(serviceId);
     }
 
-    if (!channelConfig) {
-      conditionalLog(from, '⚠️ Canal não encontrado para esta mensagem:', {
+    if (!channelConfigs || channelConfigs.length === 0) {
+      conditionalLog(from, '⚠️ Nenhum canal encontrado para este service_id:', {
         serviceId,
-        userId,
       });
       return res.status(200).json({
         status: 'ignored',
-        message: 'Canal não configurado para este service_id/user_id',
+        message: 'Nenhum canal configurado para este service_id',
       });
     }
 
-    // Log do canal identificado
+    // Log dos canais identificados
     alwaysLog(
-      `📨 [CANAL ${channelConfig.custom_channel_id}] Mensagem recebida para vendedor:`,
-      {
-        vendedor: channelConfig.desc,
-        serviceId: serviceId,
-        userId: userId,
-        messageId: messageId,
-      }
+      `📨 [SERVICE ${serviceId}] Mensagem recebida - ${channelConfigs.length} canal(is) encontrado(s):`,
+      channelConfigs.map((config) => ({
+        channelId: config.custom_channel_id,
+        vendedor: config.desc,
+        userId: config.digisac_user_id,
+      }))
     );
 
     // Buscar o número de telefone do contato através da API do DigiSac
@@ -782,42 +792,82 @@ router.post('/digisac/webhook', async (req, res) => {
       messageBody = `📎 Mídia (${messageType})`;
     }
 
-    // Enviar para o Respond.io usando o token específico do canal
-    let respondResult;
+    // Enviar para TODOS os canais que usam este service_id
+    let allResults = [];
+    let successCount = 0;
+    let errorCount = 0;
 
-    // Criar instância temporária do serviço Respond.io com token do canal
-    const channelRespondService = {
-      ...respondIoApiService,
-      token: channelConfig.custom_channel_token,
-      channelId: channelConfig.custom_channel_id,
-      headers: {
-        authorization: `Bearer ${channelConfig.custom_channel_token}`,
-        'content-type': 'application/json',
-        'cache-control': 'no-cache',
-      },
-    };
-
-    if (isFromMe) {
-      conditionalLog(
-        contactPhoneNumber,
-        `🔄 [CANAL ${channelConfig.custom_channel_id}] Processando echo do vendedor ${channelConfig.desc}`
-      );
-
-      // Para Messaging Echoes, tentar obter dados do contato
+    for (const channelConfig of channelConfigs) {
       try {
-        const contactResult = await digiSacApiService.getContactProfile(from);
-        if (contactResult.success && contactResult.data) {
-          const contactData = contactResult.data.data || contactResult.data;
-          respondResult = await sendMessageWithChannelToken(
-            channelRespondService,
-            processedMessage,
-            messageId,
+        // Criar instância temporária do serviço Respond.io com token do canal
+        const channelRespondService = {
+          ...respondIoApiService,
+          token: channelConfig.custom_channel_token,
+          channelId: channelConfig.custom_channel_id,
+          headers: {
+            authorization: `Bearer ${channelConfig.custom_channel_token}`,
+            'content-type': 'application/json',
+            'cache-control': 'no-cache',
+          },
+        };
+
+        let respondResult;
+
+        if (isFromMe) {
+          conditionalLog(
             contactPhoneNumber,
-            timestamp,
-            contactData,
-            true
+            `🔄 [CANAL ${channelConfig.custom_channel_id}] Processando echo do vendedor ${channelConfig.desc}`
           );
+
+          // Para Messaging Echoes, tentar obter dados do contato
+          try {
+            const contactResult = await digiSacApiService.getContactProfile(
+              from
+            );
+            if (contactResult.success && contactResult.data) {
+              const contactData = contactResult.data.data || contactResult.data;
+              respondResult = await sendMessageWithChannelToken(
+                channelRespondService,
+                processedMessage,
+                messageId,
+                contactPhoneNumber,
+                timestamp,
+                contactData,
+                true
+              );
+            } else {
+              respondResult = await sendMessageWithChannelToken(
+                channelRespondService,
+                processedMessage,
+                messageId,
+                contactPhoneNumber,
+                timestamp,
+                null,
+                true
+              );
+            }
+          } catch (error) {
+            conditionalLog(
+              contactPhoneNumber,
+              '⚠️ Erro ao obter dados do contato para Messaging Echo:',
+              error.message
+            );
+            respondResult = await sendMessageWithChannelToken(
+              channelRespondService,
+              processedMessage,
+              messageId,
+              contactPhoneNumber,
+              timestamp,
+              null,
+              true
+            );
+          }
         } else {
+          conditionalLog(
+            contactPhoneNumber,
+            `📨 [CANAL ${channelConfig.custom_channel_id}] Mensagem do cliente para vendedor ${channelConfig.desc}`
+          );
+
           respondResult = await sendMessageWithChannelToken(
             channelRespondService,
             processedMessage,
@@ -825,54 +875,54 @@ router.post('/digisac/webhook', async (req, res) => {
             contactPhoneNumber,
             timestamp,
             null,
-            true
+            false
           );
         }
+
+        // Log do resultado para este canal
+        if (respondResult && respondResult.success) {
+          conditionalLog(
+            contactPhoneNumber,
+            `✅ [CANAL ${channelConfig.custom_channel_id}] Mensagem entregue para ${channelConfig.desc}`
+          );
+          successCount++;
+        } else {
+          errorLog(
+            `❌ [CANAL ${channelConfig.custom_channel_id}] Erro ao entregar mensagem para ${channelConfig.desc}:`,
+            respondResult?.error
+          );
+          errorCount++;
+        }
+
+        allResults.push({
+          channelId: channelConfig.custom_channel_id,
+          vendedor: channelConfig.desc,
+          success: respondResult?.success || false,
+          error: respondResult?.error || null,
+        });
       } catch (error) {
-        conditionalLog(
-          contactPhoneNumber,
-          '⚠️ Erro ao obter dados do contato para Messaging Echo:',
-          error.message
+        errorLog(
+          `❌ [CANAL ${channelConfig.custom_channel_id}] Erro crítico ao processar canal ${channelConfig.desc}:`,
+          error
         );
-        respondResult = await sendMessageWithChannelToken(
-          channelRespondService,
-          processedMessage,
-          messageId,
-          contactPhoneNumber,
-          timestamp,
-          null,
-          true
-        );
+        errorCount++;
+        allResults.push({
+          channelId: channelConfig.custom_channel_id,
+          vendedor: channelConfig.desc,
+          success: false,
+          error: error.message,
+        });
       }
-    } else {
-      conditionalLog(
-        contactPhoneNumber,
-        `📨 [CANAL ${channelConfig.custom_channel_id}] Mensagem do cliente para vendedor ${channelConfig.desc}`
-      );
-
-      respondResult = await sendMessageWithChannelToken(
-        channelRespondService,
-        processedMessage,
-        messageId,
-        contactPhoneNumber,
-        timestamp,
-        null,
-        false
-      );
     }
 
-    // Log do resultado
-    if (respondResult && respondResult.success) {
-      conditionalLog(
-        contactPhoneNumber,
-        `✅ [CANAL ${channelConfig.custom_channel_id}] Mensagem entregue para ${channelConfig.desc}`
-      );
-    } else {
-      errorLog(
-        `❌ [CANAL ${channelConfig.custom_channel_id}] Erro ao entregar mensagem:`,
-        respondResult?.error
-      );
-    }
+    // Log do resumo final
+    alwaysLog(`📊 [SERVICE ${serviceId}] Resumo do processamento:`, {
+      totalCanais: channelConfigs.length,
+      sucessos: successCount,
+      erros: errorCount,
+      messageId: messageId,
+      isFromMe: isFromMe,
+    });
 
     // Responder ao DigiSac que recebemos o webhook
     res
