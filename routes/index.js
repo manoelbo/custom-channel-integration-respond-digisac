@@ -391,17 +391,25 @@ router.post('/:channelID/message', async (req, res) => {
   console.log(`🔔 channelID recebido na rota: ${channelID}`);
 
   try {
+    // Estruturar headers corretamente
+    const headers = {
+      'API-Key': process.env.REFERA_API_KEY,
+      Authorization: `Bearer ${process.env.REFERA_API_TOKEN}`,
+      Cookie: `csrftoken=${process.env.REFERA_CSRF_TOKEN}`,
+      'Content-Type': 'application/json',
+    };
+
+    console.log('🔧 Headers estruturados:', {
+      'API-Key': process.env.REFERA_API_KEY ? '***' : 'NÃO CONFIGURADO',
+      Authorization: process.env.REFERA_API_TOKEN ? '***' : 'NÃO CONFIGURADO',
+      Cookie: process.env.REFERA_CSRF_TOKEN ? '***' : 'NÃO CONFIGURADO',
+    });
+
     // Fazer chamada para a API da Refera
     const referaResponse = await axios({
       method: 'post',
       url: 'https://api.refera.com.br/api/v1/connections-message-tool/',
-      headers: {
-        'API-Key':
-          '6b525d25cc30f5311d89b453f7d8bb0925438944362ac7c518fb37a5547beaa2',
-        Authorization: `Bearer ${process.env.REFERA_API_TOKEN}`,
-        Cookie: `csrftoken=${process.env.REFERA_CSRF_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
       data: {
         channelID: channelID,
         // Adicionar outros dados se necessário
