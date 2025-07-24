@@ -407,7 +407,7 @@ router.post('/:channelID/message', async (req, res) => {
 
     // Fazer chamada para a API da Refera
     const referaResponse = await axios({
-      method: 'post',
+      method: 'get',
       url: 'https://api.refera.com.br/api/v1/connections-message-tool/',
       headers: headers,
       data: {

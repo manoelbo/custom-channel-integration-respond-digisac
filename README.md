@@ -9,6 +9,7 @@ A integração permite que você use o DigiSac como um "canal customizado" dentr
 | Método | Rota | Tipo | Descrição |
 | ---- | ------ | --- | ------------------ |
 | POST | `/message` | Outbound | Recebe mensagens do respond.io e envia para DigiSac via API |
+| POST | `/service/:serviceId/user/:userId/message` | Outbound | Recebe mensagens do respond.io e envia para DigiSac com service_id e user_id específicos |
 | POST | `/digisac/webhook` | Inbound | Recebe mensagens do DigiSac e envia para respond.io via webhook |
 | GET | `/message/:messageId/status` | Status | Consulta status de uma mensagem específica |
 | GET | `/health` | Health Check | Verifica se o servidor está funcionando |
@@ -21,8 +22,6 @@ A integração permite que você use o DigiSac como um "canal customizado" dentr
 - npm 10.x ou superior
 - Conta no [respond.io](https://respond.io) com token da API
 - Conta no [DigiSac](https://sac.digital) com token da API
-
-
 
 ## 🚀 Configuração
 
@@ -64,13 +63,26 @@ npm start
 
 ### Mensagens Outbound (Respond.io → DigiSac)
 
+#### Rota Padrão (`/message`)
 ```mermaid
 sequenceDiagram
     participant respond.io
     participant Custom Integration Server
     participant DigiSac
     respond.io ->> Custom Integration Server: Envia mensagem outbound. Rota: /message
-    Custom Integration Server->> DigiSac: Chama API de envio de mensagem
+    Custom Integration Server->> DigiSac: Chama API de envio de mensagem (usa service_id e user_id padrão)
+    DigiSac ->> Custom Integration Server: Resposta: 200 OK ou 4xx
+    Custom Integration Server ->> respond.io: Resposta: 200 OK ou 4xx (com erro se houver)
+```
+
+#### Rota com Parâmetros (`/service/:serviceId/user/:userId/message`)
+```mermaid
+sequenceDiagram
+    participant respond.io
+    participant Custom Integration Server
+    participant DigiSac
+    respond.io ->> Custom Integration Server: Envia mensagem outbound. Rota: /service/SERVICE_ID/user/USER_ID/message
+    Custom Integration Server->> DigiSac: Chama API de envio de mensagem (usa service_id e user_id da URL)
     DigiSac ->> Custom Integration Server: Resposta: 200 OK ou 4xx
     Custom Integration Server ->> respond.io: Resposta: 200 OK ou 4xx (com erro se houver)
 ```
@@ -95,6 +107,7 @@ sequenceDiagram
 ### ✅ Implementadas
 
 - ✅ Envio de mensagens de texto do respond.io para DigiSac
+- ✅ Envio de mensagens com service_id e user_id customizados
 - ✅ Recebimento de mensagens do DigiSac via webhook
 - ✅ Formatação automática de números de telefone brasileiros
 - ✅ Validação de números de telefone brasileiros
@@ -110,6 +123,47 @@ sequenceDiagram
 - 🔄 Webhook signature validation
 - 🔄 Rate limiting
 - 🔄 Retry logic para falhas
+
+## 🛠️ Exemplos de Uso
+
+### Enviando Mensagem com Rota Padrão
+
+```bash
+POST /message
+Authorization: Bearer SEU_TOKEN_RESPOND_IO
+Content-Type: application/json
+
+{
+  "contactId": "5511999999999",
+  "message": {
+    "type": "text",
+    "text": "Olá, como posso ajudar?"
+  }
+}
+```
+
+### Enviando Mensagem com Service ID e User ID Específicos
+
+```bash
+POST /service/MEU_SERVICE_ID/user/MEU_USER_ID/message
+Authorization: Bearer SEU_TOKEN_RESPOND_IO
+Content-Type: application/json
+
+{
+  "contactId": "5511999999999",
+  "message": {
+    "type": "text",
+    "text": "Olá, como posso ajudar?"
+  }
+}
+```
+
+### Diferença entre as Rotas
+
+- **`/message`**: Usa os valores padrão de `service_id` e `user_id` configurados na classe `DigiSacMessage`
+- **`/service/:serviceId/user/:userId/message`**: Usa os valores específicos fornecidos nos parâmetros da URL
+
+Ambas as rotas têm a mesma funcionalidade, mas a segunda permite maior flexibilidade para diferentes configurações de serviço e usuário.
 
 ## 🐳 Docker
 
@@ -153,11 +207,21 @@ docker-compose down
 
 ## 🔧 Configuração no Respond.io
 
+### Para a Rota Padrão (`/message`)
 1. Acesse seu painel do respond.io
 2. Vá em **Channels > Custom Channel**
 3. Configure as URLs:
    - **Outbound URL**: `https://seu-servidor.com/message`
    - **Webhook URL**: Será configurada automaticamente
+
+### Para a Rota com Parâmetros (`/service/:serviceId/user/:userId/message`)
+1. Acesse seu painel do respond.io
+2. Vá em **Channels > Custom Channel**
+3. Configure as URLs:
+   - **Outbound URL**: `https://seu-servidor.com/service/SEU_SERVICE_ID/user/SEU_USER_ID/message`
+   - **Webhook URL**: Será configurada automaticamente
+
+> **Nota**: Substitua `SEU_SERVICE_ID` e `SEU_USER_ID` pelos valores reais que você deseja usar na API do DigiSac.
 
 ## 📚 Referências
 
@@ -182,6 +246,15 @@ docker-compose down
 - Verifique se a URL do webhook está acessível publicamente
 - Confirme se o endpoint `/digisac/webhook` está respondendo
 - Verifique os logs do servidor para erros
+
+### Diferença entre as Rotas de Envio
+
+Se você está tendo problemas com uma rota específica:
+
+1. **Rota `/message`**: Usa valores padrão configurados no código
+2. **Rota `/service/:serviceId/user/:userId/message`**: Usa valores específicos da URL
+
+Verifique se os valores de `service_id` e `user_id` estão corretos para sua configuração no DigiSac.
 
 ## 🤝 Contribuindo
 
