@@ -4,6 +4,36 @@ Este é um servidor de integração para conectar a plataforma [respond.io](http
 
 A integração permite que você use o DigiSac como um "canal customizado" dentro do respond.io, habilitando o envio e recebimento de mensagens WhatsApp através da plataforma brasileira.
 
+## 🏗️ Nova Arquitetura Modular
+
+### Estrutura do Projeto (Reorganizada)
+
+```
+custom-channel-integration-respond-digisac/
+├── server.js                    # Servidor Express principal
+├── routes/
+│   └── index.js                 # Rotas principais (webhook, message)
+├── services/                    # Serviços de API organizados
+│   ├── digisac.js              # Serviço da API DigiSac
+│   ├── respond.js              # Serviço da API Respond.io
+│   └── refera.js               # Serviço da API Refera
+├── utils/                       # Utilitários reutilizáveis
+│   ├── logger.js               # Funções de log centralizadas
+│   ├── formatters.js           # Funções de formatação de dados
+│   └── validators.js           # Funções de validação
+├── package.json                 # Dependências e scripts
+├── docker-compose.yml           # Configuração Docker
+└── README.md                    # Documentação completa
+```
+
+### Benefícios da Nova Arquitetura
+
+- **📦 Modularidade**: Código organizado em módulos específicos por responsabilidade
+- **🔧 Manutenibilidade**: Cada arquivo tem uma responsabilidade clara
+- **📖 Legibilidade**: Código mais fácil de entender e navegar
+- **🚀 Performance**: Imports mais diretos e eficientes
+- **🔄 Reutilização**: Utilitários podem ser reutilizados em diferentes partes
+
 ## 🔗 Rotas da API
 
 | Método | Rota | Tipo | Descrição |
@@ -45,6 +75,10 @@ RESPOND_IO_CHANNEL_ID=digisac_channel_001
 # Configurações do servidor
 APP_PORT=3030
 NODE_ENV=development
+
+# Configurações de Sandbox (opcional)
+SANDBOX_MODE=true
+SANDBOX_NUMBERS=5511999999999,5511888888888
 ```
 
 ### 3. Instalar Dependências
@@ -115,6 +149,10 @@ sequenceDiagram
 - ✅ Tratamento de erros e logs detalhados
 - ✅ Health check endpoint
 - ✅ Consulta de status de mensagens
+- ✅ **Arquitetura modular organizada**
+- ✅ **Logs centralizados e condicionais**
+- ✅ **Validações padronizadas**
+- ✅ **Formatação de dados consistente**
 
 ### 🔄 Em Desenvolvimento
 
@@ -160,7 +198,7 @@ Content-Type: application/json
 
 ### Diferença entre as Rotas
 
-- **`/message`**: Usa os valores padrão de `service_id` e `user_id` configurados na classe `DigiSacMessage`
+- **`/message`**: Usa os valores padrão de `service_id` e `user_id` configurados no serviço DigiSac
 - **`/service/:serviceId/user/:userId/message`**: Usa os valores específicos fornecidos nos parâmetros da URL
 
 Ambas as rotas têm a mesma funcionalidade, mas a segunda permite maior flexibilidade para diferentes configurações de serviço e usuário.
@@ -223,6 +261,21 @@ docker-compose down
 
 > **Nota**: Substitua `SEU_SERVICE_ID` e `SEU_USER_ID` pelos valores reais que você deseja usar na API do DigiSac.
 
+## 🏗️ Arquitetura dos Módulos
+
+### 📁 Services/
+- **`digisac.js`**: Serviço completo para integração com a API DigiSac
+- **`respond.js`**: Serviço para integração com a API Respond.io
+- **`refera.js`**: Serviço para integração com a API Refera
+
+### 📁 Utils/
+- **`logger.js`**: Sistema de logs centralizado com modo sandbox
+- **`formatters.js`**: Funções para formatação de dados e respostas
+- **`validators.js`**: Validações padronizadas para dados de entrada
+
+### 📁 Routes/
+- **`index.js`**: Rotas principais da aplicação (refatoradas e otimizadas)
+
 ## 📚 Referências
 
 - [DigiSac API Documentation](https://documenter.getpostman.com/view/24605757/2sA3BhfaDg)
@@ -251,7 +304,7 @@ docker-compose down
 
 Se você está tendo problemas com uma rota específica:
 
-1. **Rota `/message`**: Usa valores padrão configurados no código
+1. **Rota `/message`**: Usa valores padrão configurados no serviço DigiSac
 2. **Rota `/service/:serviceId/user/:userId/message`**: Usa valores específicos da URL
 
 Verifique se os valores de `service_id` e `user_id` estão corretos para sua configuração no DigiSac.
