@@ -86,28 +86,12 @@ function alwaysLog(message, data = null) {
 }
 
 /**
- * Rota para envio de mensagens: FROM respond.io TO DigiSac
- * Endpoint: POST /message
+ * Função para validar autenticação
+ * @param {Object} req - Request object
+ * @param {string} phoneNumber - Número de telefone para logs
+ * @returns {Object} - { success: boolean, error?: Object }
  */
-router.post('/message', async (req, res) => {
-  alwaysLog('🚀 Endpoint /message chamado');
-
-  // Extrair dados da requisição do respond.io
-  const phoneNumber = req.body.contactId || req.body.number;
-  const messageData = req.body.message || req.body;
-
-  conditionalLog(phoneNumber, '📋 Headers recebidos:', req.headers);
-  conditionalLog(
-    phoneNumber,
-    '📦 Body recebido:',
-    JSON.stringify(req.body, null, 2)
-  );
-
-  /**
-   * Autenticação
-   * Verificar o bearer token do cabeçalho da requisição
-   * Comparar com o token da API do respond.io
-   */
+function validateAuthentication(req, phoneNumber) {
   const bearerToken = req.headers.authorization;
   conditionalLog(phoneNumber, '🔑 Bearer token recebido:', bearerToken);
   conditionalLog(
@@ -118,11 +102,13 @@ router.post('/message', async (req, res) => {
 
   if (!bearerToken) {
     alwaysLog('❌ Erro: Bearer token não encontrado');
-    return res.status(401).json({
+    return {
+      success: false,
       error: {
+        status: 401,
         message: '401: UNAUTHORIZED - Bearer token não encontrado',
       },
-    });
+    };
   }
 
   const token = bearerToken.substring(7, bearerToken.length);
@@ -136,47 +122,79 @@ router.post('/message', async (req, res) => {
 
   if (token !== CHANNEL_API_TOKEN) {
     alwaysLog('❌ Erro: Token inválido');
-    return res.status(401).json({
+    return {
+      success: false,
       error: {
+        status: 401,
         message: '401: UNAUTHORIZED - Token inválido',
       },
-    });
+    };
   }
 
   conditionalLog(phoneNumber, '✅ Autenticação bem-sucedida');
+  return { success: true };
+}
 
-  conditionalLog(phoneNumber, '📱 Número de telefone extraído:', phoneNumber);
-  conditionalLog(
-    phoneNumber,
-    '💬 Dados da mensagem:',
-    JSON.stringify(messageData, null, 2)
-  );
-
+/**
+ * Função para validar dados da mensagem
+ * @param {string} phoneNumber - Número de telefone
+ * @param {Object} messageData - Dados da mensagem
+ * @returns {Object} - { success: boolean, error?: Object }
+ */
+function validateMessageData(phoneNumber, messageData) {
   // Validar número de telefone brasileiro
   if (!phoneNumber || !isValidBrazilianPhone(phoneNumber)) {
     alwaysLog('❌ Erro: Número de telefone inválido:', phoneNumber);
-    return res.status(400).json({
+    return {
+      success: false,
       error: {
+        status: 400,
         message: 'Número de telefone brasileiro inválido',
       },
-    });
+    };
   }
 
   // Validar mensagem
   if (!messageData || !messageData.type) {
     alwaysLog('❌ Erro: Dados da mensagem inválidos');
-    return res.status(400).json({
+    return {
+      success: false,
       error: {
+        status: 400,
         message: 'Dados da mensagem são obrigatórios',
       },
-    });
+    };
   }
 
   conditionalLog(phoneNumber, '✅ Validações passaram');
+  return { success: true };
+}
 
+/**
+ * Função para criar mensagem DigiSac
+ * @param {string} phoneNumber - Número de telefone
+ * @param {Object} messageData - Dados da mensagem
+ * @param {string} serviceId - ID do serviço (opcional)
+ * @param {string} userId - ID do usuário (opcional)
+ * @returns {Promise<DigiSacMessage>} - Mensagem DigiSac criada
+ */
+async function createDigiSacMessage(
+  phoneNumber,
+  messageData,
+  serviceId = null,
+  userId = null
+) {
   // Criar mensagem DigiSac baseada no tipo
   const digiSacMessage = new DigiSacMessage();
   digiSacMessage.to = formatBrazilianPhoneNumber(phoneNumber);
+
+  // Usar service_id e user_id dos parâmetros se fornecidos
+  if (serviceId) {
+    digiSacMessage.service_id = serviceId;
+  }
+  if (userId) {
+    digiSacMessage.user_id = userId;
+  }
 
   // Processar diferentes tipos de mensagem
   switch (messageData.type) {
@@ -211,66 +229,167 @@ router.post('/message', async (req, res) => {
       break;
 
     default:
-      alwaysLog('❌ Erro: Tipo de mensagem não suportado:', messageData.type);
+      throw new Error(`Tipo de mensagem não suportado: ${messageData.type}`);
+  }
+
+  return digiSacMessage;
+}
+
+/**
+ * Função para processar envio de mensagem
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {string} serviceId - ID do serviço (opcional)
+ * @param {string} userId - ID do usuário (opcional)
+ */
+async function processMessageSending(
+  req,
+  res,
+  serviceId = null,
+  userId = null
+) {
+  const routeName =
+    serviceId && userId
+      ? `/service/${serviceId}/user/${userId}/message`
+      : '/message';
+
+  alwaysLog(`🚀 Endpoint ${routeName} chamado`);
+
+  // Extrair dados da requisição do respond.io
+  const phoneNumber = req.body.contactId || req.body.number;
+  const messageData = req.body.message || req.body;
+
+  conditionalLog(phoneNumber, '📋 Headers recebidos:', req.headers);
+  conditionalLog(
+    phoneNumber,
+    '📦 Body recebido:',
+    JSON.stringify(req.body, null, 2)
+  );
+
+  // Se temos parâmetros de URL, logar eles
+  if (serviceId || userId) {
+    conditionalLog(phoneNumber, '🔧 Parâmetros da URL:', {
+      serviceId,
+      userId,
+    });
+  }
+
+  // Validar autenticação
+  const authResult = validateAuthentication(req, phoneNumber);
+  if (!authResult.success) {
+    return res.status(authResult.error.status).json({
+      error: {
+        message: authResult.error.message,
+      },
+    });
+  }
+
+  conditionalLog(phoneNumber, '📱 Número de telefone extraído:', phoneNumber);
+  conditionalLog(
+    phoneNumber,
+    '💬 Dados da mensagem:',
+    JSON.stringify(messageData, null, 2)
+  );
+
+  // Validar dados da mensagem
+  const validationResult = validateMessageData(phoneNumber, messageData);
+  if (!validationResult.success) {
+    return res.status(validationResult.error.status).json({
+      error: {
+        message: validationResult.error.message,
+      },
+    });
+  }
+
+  try {
+    // Criar mensagem DigiSac
+    const digiSacMessage = await createDigiSacMessage(
+      phoneNumber,
+      messageData,
+      serviceId,
+      userId
+    );
+
+    conditionalLog(phoneNumber, '📤 Enviando mensagem para DigiSac:', {
+      to: digiSacMessage.to,
+      type: digiSacMessage.type,
+      text: digiSacMessage.text,
+      service_id: digiSacMessage.service_id,
+      user_id: digiSacMessage.user_id,
+      hasFile: !!digiSacMessage.file,
+      fileDetails: digiSacMessage.file
+        ? {
+            name: digiSacMessage.file.name,
+            mimetype: digiSacMessage.file.mimetype,
+            base64Length: digiSacMessage.file.base64.length,
+          }
+        : null,
+    });
+
+    // Enviar mensagem via DigiSac
+    const result = await digiSacApi.sendMessage(digiSacMessage);
+
+    conditionalLog(phoneNumber, '📤 Resultado do DigiSac:', result);
+
+    if (result.success) {
+      // Sucesso - retornar ID da mensagem para o respond.io
+      conditionalLog(
+        phoneNumber,
+        '✅ Mensagem enviada com sucesso, mId:',
+        result.data.message_id
+      );
+      res.json({
+        mId: result.data.message_id,
+      });
+    } else {
+      // Erro - retornar erro detalhado
+      alwaysLog('❌ Erro do DigiSac:', result.error);
+      const statusCode = result.error.code === 401 ? 401 : 400;
+      res.status(statusCode).json({
+        error: {
+          message: result.error.message,
+          details: result.error.details,
+        },
+      });
+    }
+  } catch (error) {
+    alwaysLog(`❌ Erro no endpoint ${routeName}:`, error);
+
+    // Verificar se é erro de tipo não suportado
+    if (error.message.includes('Tipo de mensagem não suportado')) {
       return res.status(400).json({
         error: {
-          message: 'Tipo de mensagem não suportado',
+          message: error.message,
           supportedTypes: ['text', 'attachment', 'location', 'quick_reply'],
         },
       });
-  }
+    }
 
-  conditionalLog(phoneNumber, '📤 Enviando mensagem para DigiSac:', {
-    to: digiSacMessage.to,
-    type: digiSacMessage.type,
-    text: digiSacMessage.text,
-    hasFile: !!digiSacMessage.file,
-    fileDetails: digiSacMessage.file
-      ? {
-          name: digiSacMessage.file.name,
-          mimetype: digiSacMessage.file.mimetype,
-          base64Length: digiSacMessage.file.base64.length,
-        }
-      : null,
-  });
-
-  // Enviar mensagem via DigiSac
-  digiSacApi
-    .sendMessage(digiSacMessage)
-    .then((result) => {
-      conditionalLog(phoneNumber, '📤 Resultado do DigiSac:', result);
-
-      if (result.success) {
-        // Sucesso - retornar ID da mensagem para o respond.io
-        conditionalLog(
-          phoneNumber,
-          '✅ Mensagem enviada com sucesso, mId:',
-          result.data.message_id
-        );
-        res.json({
-          mId: result.data.message_id,
-        });
-      } else {
-        // Erro - retornar erro detalhado
-        alwaysLog('❌ Erro do DigiSac:', result.error);
-        const statusCode = result.error.code === 401 ? 401 : 400;
-        res.status(statusCode).json({
-          error: {
-            message: result.error.message,
-            details: result.error.details,
-          },
-        });
-      }
-    })
-    .catch((error) => {
-      alwaysLog('❌ Erro no endpoint /message:', error);
-      res.status(500).json({
-        error: {
-          message: 'Erro interno do servidor',
-          details: error.message,
-        },
-      });
+    res.status(500).json({
+      error: {
+        message: 'Erro interno do servidor',
+        details: error.message,
+      },
     });
+  }
+}
+
+/**
+ * Rota para envio de mensagens: FROM respond.io TO DigiSac
+ * Endpoint: POST /message
+ */
+router.post('/message', async (req, res) => {
+  await processMessageSending(req, res);
+});
+
+/**
+ * Rota para envio de mensagens com channelID na URL
+ * Endpoint: POST /:channelID/message
+ */
+router.post('/:channelID/message', async (req, res) => {
+  const { channelID } = req.params;
+  console.log(`🔔 channelID recebido na rota: ${channelID}`);
+  res.json({ status: 'ok', channelID });
 });
 
 /**
