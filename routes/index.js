@@ -278,10 +278,23 @@ async function sendMessageWithChannelToken(
 
     // Adicionar informações do contato se fornecidas
     if (contactData) {
+      alwaysLog('[RESPOND.IO] Dados do contato recebidos:', {
+        name: contactData.name,
+        hasData: !!contactData.data,
+        phoneNumber: contactPhoneNumber,
+      });
+
       webhookData.contact = formatContactForRespondIo(
         contactData,
         contactPhoneNumber
       );
+
+      alwaysLog(
+        '[RESPOND.IO] Dados do contato formatados:',
+        webhookData.contact
+      );
+    } else {
+      alwaysLog('[RESPOND.IO] Nenhum dado de contato disponível');
     }
 
     // Log do payload e headers
@@ -687,6 +700,7 @@ router.post('/digisac/webhook', async (req, res) => {
 
     // Buscar o número de telefone do contato através da API do DigiSac
     let contactPhoneNumber = null;
+    let contactData = null; // Dados completos do contato
     let contactIdToUse = from; // ID padrão para buscar dados do contato
 
     // Para Messaging Echoes, usar o contactId em vez do fromId
@@ -716,16 +730,35 @@ router.post('/digisac/webhook', async (req, res) => {
         contactIdToUse
       );
       if (contactResult.success && contactResult.data) {
+        // Armazenar dados completos do contato
+        contactData = contactResult.data;
+
+        // Extrair número do telefone da estrutura correta do DigiSac
         contactPhoneNumber =
           contactResult.data.data?.number ||
           contactResult.data.number ||
           contactResult.data.phone ||
-          contactResult.data.contactId;
+          contactResult.data.contactId ||
+          contactIdToUse;
         conditionalLog(
           from,
           '📱 Número do contato encontrado:',
           contactPhoneNumber
         );
+        conditionalLog(
+          from,
+          '👤 Dados completos do contato:',
+          JSON.stringify(contactData, null, 2)
+        );
+
+        // Log específico para verificar o nome
+        if (contactData.name) {
+          conditionalLog(
+            from,
+            '👤 Nome do contato encontrado:',
+            contactData.name
+          );
+        }
       } else {
         conditionalLog(
           from,
@@ -975,7 +1008,7 @@ router.post('/digisac/webhook', async (req, res) => {
             messageId,
             contactPhoneNumber,
             timestamp,
-            null, // Não precisamos buscar dados do contato novamente
+            contactData, // Incluir dados completos do contato
             true
           );
         } else {
@@ -995,7 +1028,7 @@ router.post('/digisac/webhook', async (req, res) => {
             messageId,
             contactPhoneNumber,
             timestamp,
-            null,
+            contactData, // Incluir dados completos do contato
             false
           );
         }

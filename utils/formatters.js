@@ -78,9 +78,29 @@ function formatTimestamp(timestamp) {
  * @returns {Object} - Dados formatados para respond.io
  */
 function formatContactForRespondIo(contactData, phoneNumber) {
+  // Processar nome brasileiro - primeiro nome e sobrenome
+  let firstName = '';
+  let lastName = '';
+
+  if (contactData.name) {
+    const nameParts = contactData.name.trim().split(' ');
+    if (nameParts.length === 1) {
+      // Apenas um nome
+      firstName = nameParts[0];
+    } else if (nameParts.length === 2) {
+      // Dois nomes - primeiro e último
+      firstName = nameParts[0];
+      lastName = nameParts[1];
+    } else {
+      // Mais de dois nomes - primeiro nome e resto como sobrenome
+      firstName = nameParts[0];
+      lastName = nameParts.slice(1).join(' ');
+    }
+  }
+
   return {
-    firstName: contactData.firstName || contactData.name || '',
-    lastName: contactData.lastName || '',
+    firstName: firstName,
+    lastName: lastName,
     profilePic: contactData.profilePic || contactData.avatar || '',
     countryCode: contactData.countryCode || 'BR',
     email: contactData.email || '',
