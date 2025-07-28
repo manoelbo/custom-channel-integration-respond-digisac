@@ -98,13 +98,23 @@ function formatContactForRespondIo(contactData, phoneNumber) {
     }
   }
 
+  // Garantir que o número de telefone tenha o formato correto (+55)
+  let formattedPhone = phoneNumber;
+  if (formattedPhone && !formattedPhone.startsWith('+')) {
+    if (formattedPhone.startsWith('55')) {
+      formattedPhone = '+' + formattedPhone;
+    } else if (formattedPhone.length >= 10) {
+      formattedPhone = '+55' + formattedPhone;
+    }
+  }
+
   return {
     firstName: firstName,
     lastName: lastName,
     profilePic: contactData.profilePic || contactData.avatar || '',
     countryCode: contactData.countryCode || 'BR',
     email: contactData.email || '',
-    phone: phoneNumber,
+    phone: formattedPhone,
     language: contactData.language || 'pt-BR',
   };
 }
@@ -125,9 +135,19 @@ function formatMessageForRespondIo(
   timestamp,
   isFromMe = false
 ) {
+  // Garantir que o contactId tenha o formato correto (+55)
+  let formattedContactId = contactPhoneNumber;
+  if (formattedContactId && !formattedContactId.startsWith('+')) {
+    if (formattedContactId.startsWith('55')) {
+      formattedContactId = '+' + formattedContactId;
+    } else if (formattedContactId.length >= 10) {
+      formattedContactId = '+55' + formattedContactId;
+    }
+  }
+
   return {
     channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
-    contactId: contactPhoneNumber,
+    contactId: formattedContactId,
     events: [
       {
         type: isFromMe ? 'message_echo' : 'message',

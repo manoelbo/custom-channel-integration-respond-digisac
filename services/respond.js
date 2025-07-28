@@ -48,6 +48,7 @@ class RespondIoApiService {
    * @param {string} contactPhoneNumber - Número do contato
    * @param {number} timestamp - Timestamp da mensagem
    * @param {boolean} isFromMe - Se a mensagem é do agente
+   * @param {Object} contactData - Dados do contato (opcional)
    * @returns {Promise<Object>} - Resposta da API
    */
   async sendMessage(
@@ -55,7 +56,8 @@ class RespondIoApiService {
     messageId,
     contactPhoneNumber,
     timestamp,
-    isFromMe = false
+    isFromMe = false,
+    contactData = null
   ) {
     try {
       if (!this.isConfigured()) {
@@ -69,6 +71,19 @@ class RespondIoApiService {
         timestamp,
         isFromMe
       );
+
+      // Adicionar informações do contato se fornecidas
+      if (contactData) {
+        webhookData.contact = formatContactForRespondIo(
+          contactData,
+          contactPhoneNumber
+        );
+        conditionalLog(
+          contactPhoneNumber,
+          '👤 Dados do contato incluídos:',
+          webhookData.contact
+        );
+      }
 
       conditionalLog(
         contactPhoneNumber,

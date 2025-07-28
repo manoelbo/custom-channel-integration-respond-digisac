@@ -311,6 +311,18 @@ async function sendMessageWithChannelToken(
       JSON.stringify(webhookData, null, 2)
     );
 
+    // Log específico para verificar se o contact está presente
+    if (webhookData.contact) {
+      alwaysLog('[RESPOND.IO] ✅ Dados do contato incluídos no webhook:', {
+        firstName: webhookData.contact.firstName,
+        lastName: webhookData.contact.lastName,
+        phone: webhookData.contact.phone,
+        countryCode: webhookData.contact.countryCode,
+      });
+    } else {
+      alwaysLog('[RESPOND.IO] ⚠️ Nenhum dado de contato no webhook');
+    }
+
     // Log comparativo com o curl que funciona
     alwaysLog('[RESPOND.IO] Comparação com curl que funciona:');
     alwaysLog('[RESPOND.IO] Headers enviados:', {
