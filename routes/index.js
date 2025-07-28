@@ -687,9 +687,34 @@ router.post('/digisac/webhook', async (req, res) => {
 
     // Buscar o número de telefone do contato através da API do DigiSac
     let contactPhoneNumber = null;
+    let contactIdToUse = from; // ID padrão para buscar dados do contato
+
+    // Para Messaging Echoes, usar o contactId em vez do fromId
+    const isFromMe = messageData.isFromMe === true;
+    if (isFromMe && messageData.contactId) {
+      contactIdToUse = messageData.contactId;
+      conditionalLog(
+        from,
+        '🔄 Messaging Echo detectado - usando contactId em vez de fromId:',
+        contactIdToUse
+      );
+    }
+
+    // Log adicional para debug do Messaging Echo
+    if (isFromMe) {
+      conditionalLog(from, '🔍 Debug Messaging Echo:', {
+        fromId: messageData.fromId,
+        contactId: messageData.contactId,
+        contactIdToUse: contactIdToUse,
+        isFromMe: messageData.isFromMe,
+      });
+    }
+
     try {
-      conditionalLog(from, '🔍 Buscando dados do contato:', from);
-      const contactResult = await digiSacApiService.getContactProfile(from);
+      conditionalLog(from, '🔍 Buscando dados do contato:', contactIdToUse);
+      const contactResult = await digiSacApiService.getContactProfile(
+        contactIdToUse
+      );
       if (contactResult.success && contactResult.data) {
         contactPhoneNumber =
           contactResult.data.data?.number ||
@@ -706,7 +731,7 @@ router.post('/digisac/webhook', async (req, res) => {
           from,
           '⚠️ Não foi possível obter dados do contato, usando ID como fallback'
         );
-        contactPhoneNumber = from;
+        contactPhoneNumber = contactIdToUse;
       }
     } catch (error) {
       conditionalLog(
@@ -714,7 +739,7 @@ router.post('/digisac/webhook', async (req, res) => {
         '⚠️ Erro ao buscar dados do contato, usando ID como fallback:',
         error.message
       );
-      contactPhoneNumber = from;
+      contactPhoneNumber = contactIdToUse;
     }
 
     if (contactPhoneNumber && !contactPhoneNumber.startsWith('+')) {
@@ -765,7 +790,6 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     // Processar mensagens enviadas pelos agentes como Messaging Echoes
-    const isFromMe = messageData.isFromMe === true;
     if (isFromMe) {
       conditionalLog(
         contactPhoneNumber,
@@ -943,49 +967,17 @@ router.post('/digisac/webhook', async (req, res) => {
             }
           );
 
-          // Para Messaging Echoes, tentar obter dados do contato
-          try {
-            const contactResult = await digiSacApiService.getContactProfile(
-              from
-            );
-            if (contactResult.success && contactResult.data) {
-              const contactData = contactResult.data.data || contactResult.data;
-              respondResult = await sendMessageWithChannelToken(
-                channelRespondService,
-                processedMessage,
-                messageId,
-                contactPhoneNumber,
-                timestamp,
-                contactData,
-                true
-              );
-            } else {
-              respondResult = await sendMessageWithChannelToken(
-                channelRespondService,
-                processedMessage,
-                messageId,
-                contactPhoneNumber,
-                timestamp,
-                null,
-                true
-              );
-            }
-          } catch (error) {
-            conditionalLog(
-              contactPhoneNumber,
-              '[ECHO] Erro ao obter dados do contato para Messaging Echo:',
-              error.message
-            );
-            respondResult = await sendMessageWithChannelToken(
-              channelRespondService,
-              processedMessage,
-              messageId,
-              contactPhoneNumber,
-              timestamp,
-              null,
-              true
-            );
-          }
+          // Para Messaging Echoes, usar os dados do contato que já foram buscados anteriormente
+          // O contactPhoneNumber já contém o número correto do contato que recebeu a mensagem
+          respondResult = await sendMessageWithChannelToken(
+            channelRespondService,
+            processedMessage,
+            messageId,
+            contactPhoneNumber,
+            timestamp,
+            null, // Não precisamos buscar dados do contato novamente
+            true
+          );
         } else {
           alwaysLog(
             `[WEBHOOK] Enviando mensagem do DigiSac para canal Respond.io`,
