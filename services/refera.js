@@ -14,6 +14,7 @@ class ReferaApiService {
     this.baseURL = 'https://api.refera.com.br/api/v1';
     this.username = process.env.REFERA_USERNAME;
     this.password = process.env.REFERA_PASSWORD;
+    this.apiKey = process.env.REFERA_API_KEY;
 
     // Tokens de autenticação (serão obtidos dinamicamente)
     this.accessToken = null;
@@ -24,6 +25,11 @@ class ReferaApiService {
     this.headers = {
       'Content-Type': 'application/json',
     };
+
+    // Adicionar API key aos headers base se disponível
+    if (this.apiKey) {
+      this.headers['api-key'] = this.apiKey;
+    }
   }
 
   /**
@@ -31,7 +37,7 @@ class ReferaApiService {
    * @returns {boolean} - Se as credenciais estão configuradas
    */
   isConfigured() {
-    return !!(this.username && this.password);
+    return !!(this.username && this.password && this.apiKey);
   }
 
   /**
@@ -64,9 +70,10 @@ class ReferaApiService {
         url: `${this.baseURL}/login`,
         headers: {
           'Content-Type': 'application/json',
+          'api-key': this.apiKey,
         },
         data: {
-          username: this.username,
+          email: this.username,
           password: this.password,
         },
       });
@@ -79,10 +86,11 @@ class ReferaApiService {
         const expiresIn = response.data.expires_in || 86400; // 24 horas em segundos
         this.tokenExpiry = new Date(Date.now() + expiresIn * 1000);
 
-        // Atualizar headers com o novo token
+        // Atualizar headers com o novo token e manter a API key
         this.headers = {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.accessToken}`,
+          'api-key': this.apiKey,
         };
 
         // Adicionar CSRF token se disponível
@@ -244,6 +252,7 @@ class ReferaApiService {
       isConfigured: this.isConfigured(),
       hasUsername: !!this.username,
       hasPassword: !!this.password,
+      hasApiKey: !!this.apiKey,
       hasValidToken: this.isTokenValid(),
       tokenExpiry: this.tokenExpiry?.toISOString(),
       baseURL: this.baseURL,
