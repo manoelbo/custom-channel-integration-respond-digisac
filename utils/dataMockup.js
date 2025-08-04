@@ -1,3 +1,12 @@
+/**
+ * DEPRECATED: Este arquivo não está mais sendo usado
+ * Os dados agora vêm diretamente da API da Refera
+ *
+ * Este arquivo foi mantido apenas para referência histórica
+ * e pode ser removido em versões futuras
+ */
+
+/*
 const dataMockup = {
   count: 18,
   next: null,
@@ -292,3 +301,4 @@ const dataMockup = {
 };
 
 module.exports = dataMockup;
+*/

@@ -198,40 +198,77 @@ async function processMessageSending(
 /**
  * Função helper para buscar configuração do canal
  * @param {string} channelID - ID do canal
- * @returns {Object|null} - Configuração do canal ou null se não encontrado
+ * @returns {Promise<Object|null>} - Configuração do canal ou null se não encontrado
  */
-function getChannelConfig(channelID) {
-  const dataMockup = require('../utils/dataMockup');
-  return dataMockup.results.find(
-    (item) => item.custom_channel_id === channelID
-  );
+async function getChannelConfig(channelID) {
+  try {
+    const result = await referaApiService.callMessageTool(channelID);
+
+    if (result.success && result.data && result.data.results) {
+      // Buscar o canal específico na resposta da API
+      const channel = result.data.results.find(
+        (item) => item.custom_channel_id === channelID
+      );
+      return channel || null;
+    }
+
+    return null;
+  } catch (error) {
+    errorLog('❌ Erro ao buscar configuração do canal:', error);
+    return null;
+  }
 }
 
 /**
  * Função helper para buscar canal por service_id e user_id (para webhooks)
  * @param {string} serviceId - ID do serviço DigiSac
  * @param {string} userId - ID do usuário DigiSac
- * @returns {Object|null} - Configuração do canal ou null se não encontrado
+ * @returns {Promise<Object|null>} - Configuração do canal ou null se não encontrado
  */
-function getChannelByServiceAndUser(serviceId, userId) {
-  const dataMockup = require('../utils/dataMockup');
-  return dataMockup.results.find(
-    (item) =>
-      item.digisac_service_id === serviceId && item.digisac_user_id === userId
-  );
+async function getChannelByServiceAndUser(serviceId, userId) {
+  try {
+    // Buscar todos os canais e filtrar por service_id e user_id
+    const result = await referaApiService.callMessageTool();
+
+    if (result.success && result.data && result.data.results) {
+      const channel = result.data.results.find(
+        (item) =>
+          item.digisac_service_id === serviceId &&
+          item.digisac_user_id === userId
+      );
+      return channel || null;
+    }
+
+    return null;
+  } catch (error) {
+    errorLog('❌ Erro ao buscar canal por service_id e user_id:', error);
+    return null;
+  }
 }
 
 /**
  * Função helper para buscar TODOS os canais por service_id (para webhooks)
  * Um service_id pode ter múltiplos canais (custom_channel_id diferentes)
  * @param {string} serviceId - ID do serviço DigiSac
- * @returns {Array} - Array de configurações de canais
+ * @returns {Promise<Array>} - Array de configurações de canais
  */
-function getChannelsByServiceId(serviceId) {
-  const dataMockup = require('../utils/dataMockup');
-  return dataMockup.results.filter(
-    (item) => item.digisac_service_id === serviceId
-  );
+async function getChannelsByServiceId(serviceId) {
+  try {
+    // Buscar todos os canais e filtrar por service_id
+    const result = await referaApiService.callMessageTool();
+
+    if (result.success && result.data && result.data.results) {
+      const channels = result.data.results.filter(
+        (item) => item.digisac_service_id === serviceId
+      );
+      return channels || [];
+    }
+
+    return [];
+  } catch (error) {
+    errorLog('❌ Erro ao buscar canais por service_id:', error);
+    return [];
+  }
 }
 
 /**
@@ -486,7 +523,7 @@ router.post('/:channelID/message', async (req, res) => {
 
   try {
     // Buscar configuração do canal
-    const channelConfig = getChannelConfig(channelID);
+    const channelConfig = await getChannelConfig(channelID);
 
     if (!channelConfig) {
       alwaysLog(`❌ [CANAL ${channelID}] Canal não encontrado`);
@@ -687,7 +724,7 @@ router.post('/digisac/webhook', async (req, res) => {
     // Buscar TODOS os canais que usam este service_id
     let channelConfigs = [];
     if (serviceId) {
-      channelConfigs = getChannelsByServiceId(serviceId);
+      channelConfigs = await getChannelsByServiceId(serviceId);
     }
 
     if (!channelConfigs || channelConfigs.length === 0) {

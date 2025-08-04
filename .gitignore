@@ -1,6 +1,7 @@
 node_modules/
 .idea/
 .env
+.env.config
 *.log
 .DS_Store
 dist/
