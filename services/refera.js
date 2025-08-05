@@ -62,6 +62,12 @@ class ReferaApiService {
    * @returns {Promise<boolean>} - Se o login foi bem-sucedido
    */
   async login() {
+    // TEMPORARIAMENTE DESABILITADO - TESTES MANUAIS VIA POSTMAN
+    apiLog('🚫 Login na API da Refera DESABILITADO para testes manuais');
+    apiLog('📝 Use o Postman para testar a API da Refera');
+    return false;
+
+    /*
     try {
       apiLog('🔐 Fazendo login na API da Refera...');
 
@@ -112,6 +118,7 @@ class ReferaApiService {
 
       return false;
     }
+    */
   }
 
   /**
@@ -134,6 +141,21 @@ class ReferaApiService {
    * @returns {Promise<Object>} - Resposta da API
    */
   async callMessageTool(channelID, data = {}) {
+    // TEMPORARIAMENTE DESABILITADO - TESTES MANUAIS VIA POSTMAN
+    apiLog('🚫 Chamada para API da Refera DESABILITADA para testes manuais');
+    apiLog('📝 Use o Postman para testar a API da Refera');
+
+    return {
+      success: false,
+      error: {
+        message:
+          'API da Refera temporariamente desabilitada para testes manuais',
+        status: 503,
+        data: null,
+      },
+    };
+
+    /*
     try {
       if (!this.isConfigured()) {
         throw new Error('Credenciais da API da Refera não estão configuradas');
@@ -200,6 +222,7 @@ class ReferaApiService {
         },
       };
     }
+    */
   }
 
   /**
