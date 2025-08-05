@@ -281,7 +281,6 @@ class ReferaApiService {
 
       apiLog('✅ Requisição para API da Refera bem-sucedida');
       apiLog('📋 Status da resposta:', response.status);
-      apiLog('📦 Dados estruturados:', JSON.stringify(response.data, null, 2));
 
       return {
         success: true,
