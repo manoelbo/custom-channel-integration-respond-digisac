@@ -21,6 +21,11 @@ class ReferaApiService {
     this.csrfToken = null;
     this.tokenExpiry = null;
 
+    // Controle de rate limiting para evitar bloqueios
+    this.lastLoginAttempt = null;
+    this.lastLoginError = null;
+    this.cooldownMinutes = 60; // 60 minutos de cooldown após falha
+
     // Headers base (serão atualizados após login)
     this.headers = {
       'Content-Type': 'application/json',
@@ -38,6 +43,64 @@ class ReferaApiService {
    */
   isConfigured() {
     return !!(this.username && this.password && this.apiKey);
+  }
+
+  /**
+   * Verificar se está em cooldown após falha de login
+   * @returns {Object} - Status do cooldown
+   */
+  isInCooldown() {
+    if (!this.lastLoginAttempt) {
+      return { inCooldown: false };
+    }
+
+    const now = new Date();
+    const cooldownEnd = new Date(
+      this.lastLoginAttempt.getTime() + this.cooldownMinutes * 60 * 1000
+    );
+    const timeRemaining = cooldownEnd.getTime() - now.getTime();
+
+    if (timeRemaining > 0) {
+      const minutesRemaining = Math.ceil(timeRemaining / (60 * 1000));
+      return {
+        inCooldown: true,
+        minutesRemaining,
+        cooldownEnd: cooldownEnd.toISOString(),
+        lastError: this.lastLoginError,
+      };
+    }
+
+    return { inCooldown: false };
+  }
+
+  /**
+   * Registrar tentativa de login falhada
+   * @param {Error} error - Erro da tentativa
+   */
+  recordLoginFailure(error) {
+    this.lastLoginAttempt = new Date();
+    this.lastLoginError = {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    };
+
+    apiLog('🚫 Login falhou - Iniciando cooldown de 60 minutos');
+    apiLog('❌ Erro da API da Refera:', error.message);
+    if (error.response?.status) {
+      apiLog('📋 Status HTTP:', error.response.status);
+    }
+    if (error.response?.data) {
+      apiLog('📦 Dados do erro:', JSON.stringify(error.response.data, null, 2));
+    }
+  }
+
+  /**
+   * Limpar histórico de falhas (quando login é bem-sucedido)
+   */
+  clearLoginFailure() {
+    this.lastLoginAttempt = null;
+    this.lastLoginError = null;
   }
 
   /**
@@ -62,21 +125,53 @@ class ReferaApiService {
    * @returns {Promise<boolean>} - Se o login foi bem-sucedido
    */
   async login() {
-    // TEMPORARIAMENTE DESABILITADO - TESTES MANUAIS VIA POSTMAN
-    apiLog('🚫 Login na API da Refera DESABILITADO para testes manuais');
-    apiLog('📝 Use o Postman para testar a API da Refera');
-    return false;
+    // Verificar se está em cooldown
+    const cooldownStatus = this.isInCooldown();
+    if (cooldownStatus.inCooldown) {
+      apiLog('⏰ Login bloqueado - Em cooldown após falha anterior');
+      apiLog(`⏳ Tempo restante: ${cooldownStatus.minutesRemaining} minutos`);
+      apiLog(
+        `🕐 Próxima tentativa permitida em: ${cooldownStatus.cooldownEnd}`
+      );
+      if (cooldownStatus.lastError) {
+        apiLog('❌ Último erro:', cooldownStatus.lastError.message);
+        if (cooldownStatus.lastError.status) {
+          apiLog('📋 Status HTTP:', cooldownStatus.lastError.status);
+        }
+        if (cooldownStatus.lastError.data) {
+          apiLog(
+            '📦 Dados do erro:',
+            JSON.stringify(cooldownStatus.lastError.data, null, 2)
+          );
+        }
+      }
+      return false;
+    }
 
-    /*
     try {
       apiLog('🔐 Fazendo login na API da Refera...');
 
       const response = await axios({
         method: 'post',
-        url: `${this.baseURL}/login`,
+        url: `${this.baseURL}/login/`,
         headers: {
-          'Content-Type': 'application/json',
+          accept: 'application/json, text/plain, /',
+          'accept-language':
+            'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh-TW;q=0.5,zh;q=0.4',
           'api-key': this.apiKey,
+          'content-type': 'application/json; charset=UTF-8',
+          origin: 'https://admin.refera.com.br',
+          priority: 'u=1, i',
+          referer: 'https://admin.refera.com.br/',
+          'sec-ch-ua':
+            '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-site',
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
         },
         data: {
           email: this.username,
@@ -94,15 +189,33 @@ class ReferaApiService {
 
         // Atualizar headers com o novo token e manter a API key
         this.headers = {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.accessToken}`,
+          accept: 'application/json, text/plain, /',
+          'accept-language':
+            'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh-TW;q=0.5,zh;q=0.4',
           'api-key': this.apiKey,
+          authorization: `Bearer ${this.accessToken}`,
+          'content-type': 'application/json; charset=UTF-8',
+          origin: 'https://admin.refera.com.br',
+          priority: 'u=1, i',
+          referer: 'https://admin.refera.com.br/',
+          'sec-ch-ua':
+            '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-site',
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
         };
 
         // Adicionar CSRF token se disponível
         if (this.csrfToken) {
           this.headers['Cookie'] = `csrftoken=${this.csrfToken}`;
         }
+
+        // Limpar histórico de falhas após login bem-sucedido
+        this.clearLoginFailure();
 
         apiLog('✅ Login na API da Refera realizado com sucesso');
         apiLog('📅 Token expira em:', this.tokenExpiry.toISOString());
@@ -112,13 +225,10 @@ class ReferaApiService {
         throw new Error('Resposta de login inválida');
       }
     } catch (error) {
-      errorLog('❌ Erro no login da API da Refera:', error.message);
-      apiLog('📋 Status do erro:', error.response?.status);
-      apiLog('📦 Dados do erro:', error.response?.data);
-
+      // Registrar falha e iniciar cooldown
+      this.recordLoginFailure(error);
       return false;
     }
-    */
   }
 
   /**
@@ -141,21 +251,6 @@ class ReferaApiService {
    * @returns {Promise<Object>} - Resposta da API
    */
   async callMessageTool(channelID, data = {}) {
-    // TEMPORARIAMENTE DESABILITADO - TESTES MANUAIS VIA POSTMAN
-    apiLog('🚫 Chamada para API da Refera DESABILITADA para testes manuais');
-    apiLog('📝 Use o Postman para testar a API da Refera');
-
-    return {
-      success: false,
-      error: {
-        message:
-          'API da Refera temporariamente desabilitada para testes manuais',
-        status: 503,
-        data: null,
-      },
-    };
-
-    /*
     try {
       if (!this.isConfigured()) {
         throw new Error('Credenciais da API da Refera não estão configuradas');
@@ -222,7 +317,6 @@ class ReferaApiService {
         },
       };
     }
-    */
   }
 
   /**
@@ -271,6 +365,8 @@ class ReferaApiService {
    * @returns {Object} - Informações de configuração
    */
   getConfigInfo() {
+    const cooldownStatus = this.isInCooldown();
+
     return {
       isConfigured: this.isConfigured(),
       hasUsername: !!this.username,
@@ -279,6 +375,12 @@ class ReferaApiService {
       hasValidToken: this.isTokenValid(),
       tokenExpiry: this.tokenExpiry?.toISOString(),
       baseURL: this.baseURL,
+      cooldown: {
+        inCooldown: cooldownStatus.inCooldown,
+        minutesRemaining: cooldownStatus.minutesRemaining || 0,
+        cooldownEnd: cooldownStatus.cooldownEnd,
+        lastError: cooldownStatus.lastError,
+      },
     };
   }
 }
