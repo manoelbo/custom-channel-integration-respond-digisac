@@ -727,6 +727,19 @@ router.post('/digisac/webhook', async (req, res) => {
       ? new Date(messageData.timestamp).getTime()
       : Date.now();
 
+    // Ignorar mensagens do tipo "ticket" - não enviar para respond.io
+    if (messageType === 'ticket') {
+      conditionalLog(
+        from,
+        '🚫 Mensagem do tipo "ticket" ignorada - não enviando para respond.io'
+      );
+      return res.status(200).json({
+        status: 'ignored',
+        message: 'Mensagem do tipo "ticket" ignorada',
+        messageType: 'ticket',
+      });
+    }
+
     // Extrair service_id da mensagem para identificar os canais
     const serviceId = messageData.service_id || messageData.serviceId;
 
@@ -999,12 +1012,26 @@ router.post('/digisac/webhook', async (req, res) => {
     });
 
     // Processar mensagem usando o serviço do Respond.io
-    const { messageBody, processedMessage } =
-      respondIoApiService.processDigiSacMessage(
-        messageData,
-        messageType,
-        contactPhoneNumber
+    const processResult = respondIoApiService.processDigiSacMessage(
+      messageData,
+      messageType,
+      contactPhoneNumber
+    );
+
+    // Verificar se a mensagem foi ignorada (ex: tipo "ticket")
+    if (processResult.ignored) {
+      conditionalLog(
+        contactPhoneNumber,
+        `🚫 Mensagem ignorada: ${processResult.reason}`
       );
+      return res.status(200).json({
+        status: 'ignored',
+        message: 'Mensagem ignorada pelo processamento',
+        reason: processResult.reason,
+      });
+    }
+
+    const { messageBody, processedMessage } = processResult;
 
     // Validar dados essenciais
     if (!messageId || !from) {

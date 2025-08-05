@@ -153,6 +153,7 @@ sequenceDiagram
 - ✅ **Logs centralizados e condicionais**
 - ✅ **Validações padronizadas**
 - ✅ **Formatação de dados consistente**
+- ✅ **Filtro de mensagens do tipo "ticket"** (ignora e não envia para respond.io)
 
 ### 🔄 Em Desenvolvimento
 
@@ -202,6 +203,40 @@ Content-Type: application/json
 - **`/service/:serviceId/user/:userId/message`**: Usa os valores específicos fornecidos nos parâmetros da URL
 
 Ambas as rotas têm a mesma funcionalidade, mas a segunda permite maior flexibilidade para diferentes configurações de serviço e usuário.
+
+## 🚫 Filtro de Mensagens do Tipo "Ticket"
+
+O servidor possui um filtro automático que ignora mensagens do tipo "ticket" recebidas do DigiSac, evitando que sejam enviadas para o respond.io.
+
+### Comportamento
+
+- **Mensagens do tipo "ticket"**: São automaticamente ignoradas
+- **Log**: A mensagem é logada como ignorada para facilitar debug
+- **Resposta**: Webhook responde com status 200 e `status: 'ignored'`
+- **Não Envio**: A mensagem não é processada nem enviada para respond.io
+
+### Exemplo de Webhook Ignorado
+
+```json
+{
+  "event": "message.created",
+  "data": {
+    "id": "ticket_123",
+    "type": "ticket",
+    "from": "5511999999999",
+    "text": "Conteúdo do ticket"
+  }
+}
+```
+
+**Resposta:**
+```json
+{
+  "status": "ignored",
+  "message": "Mensagem do tipo \"ticket\" ignorada",
+  "messageType": "ticket"
+}
+```
 
 ## 🐳 Docker
 

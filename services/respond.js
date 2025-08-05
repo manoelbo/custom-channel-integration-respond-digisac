@@ -277,6 +277,20 @@ class RespondIoApiService {
     let messageBody = '';
     let processedMessage = null;
 
+    // Ignorar mensagens do tipo "ticket"
+    if (messageType === 'ticket') {
+      conditionalLog(
+        phoneNumber,
+        '🚫 Mensagem do tipo "ticket" ignorada no processamento'
+      );
+      return {
+        messageBody: '',
+        processedMessage: null,
+        ignored: true,
+        reason: 'ticket_message_type',
+      };
+    }
+
     // Para mensagens do tipo 'chat', o texto está diretamente no campo 'text'
     if (messageType === 'chat' || messageType === 'text') {
       messageBody =
