@@ -608,6 +608,15 @@ router.post('/:channelID/message', async (req, res) => {
     }
 
     // Criar mensagem DigiSac com os dados específicos do canal
+    conditionalLog(
+      phoneNumber,
+      `🔧 [CANAL ${channelID}] Valores que serão passados para createMessage:`,
+      {
+        service_id: channelConfig.digisac_service_id,
+        user_id: channelConfig.digisac_user_id,
+      }
+    );
+
     const digiSacMessage = digiSacApiService.createMessage(
       phoneNumber,
       messageData,

@@ -22,8 +22,8 @@ class DigiSacMessage {
     this.type = 'text'; // Tipo da mensagem (text, image, document, audio)
     this.text = ''; // Texto da mensagem (opcional para áudio)
     this.file = null; // Arquivo (base64, mimetype, name)
-    this.service_id = '6e9aab4c-94fd-47e0-99f2-06ae04caaa0c';
-    this.user_id = 'c3c4de37-afc8-4be0-96a8-4f1f606eeea3';
+    this.service_id = null; // Será definido dinamicamente
+    this.user_id = null; // Será definido dinamicamente
   }
 }
 
@@ -63,6 +63,11 @@ class DigiSacApiService {
         serviceId: message.service_id, // ID da conexão
       };
 
+      // Adicionar userId se estiver definido
+      if (message.user_id) {
+        payload.userId = message.user_id;
+      }
+
       // Adicionar texto se existir (exceto para áudio puro)
       if (message.text && message.text.trim() !== '') {
         payload.text = message.text;
@@ -80,7 +85,11 @@ class DigiSacApiService {
         conditionalLog(message.to, '⚠️ Nenhum arquivo encontrado na mensagem');
       }
 
-      conditionalLog(message.to, '📤 Enviando mensagem DigiSac:', payload);
+      conditionalLog(message.to, '📤 Enviando mensagem DigiSac:', {
+        payload,
+        service_id: message.service_id,
+        user_id: message.user_id,
+      });
 
       const response = await axios.post(`${this.baseURL}/messages`, payload, {
         headers: this.headers,
@@ -290,9 +299,11 @@ class DigiSacApiService {
     // Usar service_id e user_id dos parâmetros se fornecidos
     if (serviceId) {
       digiSacMessage.service_id = serviceId;
+      conditionalLog(phoneNumber, '🔧 Service ID definido:', serviceId);
     }
     if (userId) {
       digiSacMessage.user_id = userId;
+      conditionalLog(phoneNumber, '🔧 User ID definido:', userId);
     }
 
     // Processar diferentes tipos de mensagem
