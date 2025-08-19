@@ -5,6 +5,7 @@
  */
 
 const axios = require('axios');
+const https = require('https');
 const { conditionalLog, errorLog } = require('../utils/logger');
 const {
   formatContactForRespondIo,
@@ -31,6 +32,18 @@ class RespondIoApiService {
       'content-type': 'application/json',
       'cache-control': 'no-cache',
     };
+
+    // Criar instância axios com timeout e keep-alive
+    this.http = axios.create({
+      baseURL: this.baseURL,
+      timeout: parseInt(process.env.HTTP_TIMEOUT_MS || '8000', 10),
+      httpsAgent: new https.Agent({ 
+        keepAlive: true, 
+        maxSockets: 50,
+        timeout: 60000 
+      }),
+      headers: this.headers,
+    });
   }
 
   /**
@@ -93,12 +106,7 @@ class RespondIoApiService {
         webhookData
       );
 
-      const response = await axios({
-        method: 'post',
-        url: this.baseURL,
-        headers: this.headers,
-        data: webhookData,
-      });
+      const response = await this.http.post('', webhookData);
 
       conditionalLog(
         contactPhoneNumber,
@@ -174,12 +182,7 @@ class RespondIoApiService {
         webhookData
       );
 
-      const response = await axios({
-        method: 'post',
-        url: this.baseURL,
-        headers: this.headers,
-        data: webhookData,
-      });
+      const response = await this.http.post('', webhookData);
 
       conditionalLog(
         contactPhoneNumber,

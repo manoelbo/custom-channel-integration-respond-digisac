@@ -5,6 +5,7 @@
  */
 
 const axios = require('axios');
+const https = require('https');
 const { conditionalLog, apiLog, errorLog } = require('../utils/logger');
 const { formatBrazilianPhoneNumber } = require('../utils/formatters');
 
@@ -48,6 +49,18 @@ class DigiSacApiService {
       Authorization: `Bearer ${this.token}`,
       Accept: 'application/json',
     };
+
+    // Criar instância axios com timeout e keep-alive
+    this.http = axios.create({
+      baseURL: this.baseURL,
+      timeout: parseInt(process.env.HTTP_TIMEOUT_MS || '8000', 10),
+      httpsAgent: new https.Agent({ 
+        keepAlive: true, 
+        maxSockets: 50,
+        timeout: 60000 
+      }),
+      headers: this.headers,
+    });
   }
 
   /**
@@ -91,9 +104,7 @@ class DigiSacApiService {
         user_id: message.user_id,
       });
 
-      const response = await axios.post(`${this.baseURL}/messages`, payload, {
-        headers: this.headers,
-      });
+      const response = await this.http.post('/messages', payload);
 
       return {
         success: true,
@@ -144,12 +155,7 @@ class DigiSacApiService {
    */
   async getMessageStatus(messageId) {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/messages/${messageId}`,
-        {
-          headers: this.headers,
-        }
-      );
+      const response = await this.http.get(`/messages/${messageId}`);
 
       return {
         success: true,
@@ -183,9 +189,7 @@ class DigiSacApiService {
       apiLog('🔍 [API DEBUG] Fazendo requisição para:', url);
       apiLog('🔍 [API DEBUG] Headers:', process.env.LOG_LEVEL === 'debug' ? JSON.stringify(this.headers, null, 2) : 'Headers configurados');
 
-      const response = await axios.get(url, {
-        headers: this.headers,
-      });
+      const response = await this.http.get(`/messages/${messageId}?include[0]=file`);
 
       apiLog('✅ [API DEBUG] Resposta recebida:');
       apiLog('📋 [API DEBUG] Status:', response.status);
@@ -243,12 +247,7 @@ class DigiSacApiService {
       );
       conditionalLog(phoneNumber, '🔍 DigiSac API - Headers:', this.headers);
 
-      const response = await axios.get(
-        `${this.baseURL}/contacts/${phoneNumber}`,
-        {
-          headers: this.headers,
-        }
-      );
+      const response = await this.http.get(`/contacts/${phoneNumber}`);
 
       conditionalLog(phoneNumber, '✅ DigiSac API - Resposta completa:');
       conditionalLog(phoneNumber, '📋 Status:', response.status);
@@ -354,9 +353,10 @@ class DigiSacApiService {
     try {
       conditionalLog(phoneNumber, '📎 Processando anexo:', attachment);
 
-      // Baixar o arquivo da URL
+      // Baixar o arquivo da URL (usar axios separado para URLs externas)
       const fileResponse = await axios.get(attachment.url, {
         responseType: 'arraybuffer',
+        timeout: parseInt(process.env.HTTP_TIMEOUT_MS || '8000', 10),
       });
 
       // Converter para base64

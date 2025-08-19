@@ -4,6 +4,7 @@
  */
 
 const axios = require('axios');
+const https = require('https');
 const { apiLog, errorLog } = require('../utils/logger');
 
 /**
@@ -35,6 +36,17 @@ class ReferaApiService {
     if (this.apiKey) {
       this.headers['api-key'] = this.apiKey;
     }
+
+    // Criar instância axios com timeout e keep-alive
+    this.http = axios.create({
+      baseURL: this.baseURL,
+      timeout: parseInt(process.env.HTTP_TIMEOUT_MS || '8000', 10),
+      httpsAgent: new https.Agent({ 
+        keepAlive: true, 
+        maxSockets: 50,
+        timeout: 60000 
+      }),
+    });
   }
 
   /**
@@ -91,7 +103,12 @@ class ReferaApiService {
       apiLog('📋 Status HTTP:', error.response.status);
     }
     if (error.response?.data) {
-      apiLog('📦 Dados do erro:', process.env.LOG_LEVEL === 'debug' ? JSON.stringify(error.response.data, null, 2) : 'Dados do erro');
+      apiLog(
+        '📦 Dados do erro:',
+        process.env.LOG_LEVEL === 'debug'
+          ? JSON.stringify(error.response.data, null, 2)
+          : 'Dados do erro'
+      );
     }
   }
 
@@ -151,9 +168,10 @@ class ReferaApiService {
     try {
       apiLog('🔐 Fazendo login na API da Refera...');
 
-      const response = await axios({
-        method: 'post',
-        url: `${this.baseURL}/login/`,
+      const response = await this.http.post('/login/', {
+        email: this.username,
+        password: this.password,
+      }, {
         headers: {
           accept: 'application/json, text/plain, /',
           'accept-language':
@@ -172,10 +190,6 @@ class ReferaApiService {
           'sec-fetch-site': 'same-site',
           'user-agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
-        },
-        data: {
-          email: this.username,
-          password: this.password,
         },
       });
 
@@ -269,9 +283,7 @@ class ReferaApiService {
         hasData: !!Object.keys(data).length,
       });
 
-      const response = await axios({
-        method: 'get',
-        url: `${this.baseURL}/connections-message-tool/`,
+      const response = await this.http.get('/connections-message-tool/', {
         headers: this.headers,
         params: {
           channelID: channelID,
