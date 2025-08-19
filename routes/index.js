@@ -699,7 +699,7 @@ router.post('/digisac/webhook', async (req, res) => {
       }))
     );
 
-    // Buscar o número de telefone do contato através da API do DigiSac
+    // Buscar o número de telefone do contato - otimizado para evitar getContactProfile desnecessário
     let contactPhoneNumber = null;
     let contactData = null; // Dados completos do contato
     let contactIdToUse = from; // ID padrão para buscar dados do contato
@@ -725,74 +725,123 @@ router.post('/digisac/webhook', async (req, res) => {
       });
     }
 
-    // Verificar cache de contato primeiro
-    const contactCacheKey = `contact:${contactIdToUse}`;
-    contactData = cache.get(contactCacheKey);
+    // Função helper para validar se um número parece ser um telefone brasileiro válido
+    const isValidBrazilianPhone = (phone) => {
+      if (!phone) return false;
+      const cleaned = phone.replace(/\D/g, '');
+      return cleaned.length >= 10 && cleaned.length <= 13;
+    };
+
+    // Função helper para normalizar número de telefone
+    const normalizePhoneNumber = (phone) => {
+      if (!phone) return phone;
+      let normalized = phone.replace(/\D/g, '');
+      if (normalized.startsWith('55')) {
+        return '+' + normalized;
+      } else if (normalized.length >= 10) {
+        return '+55' + normalized;
+      }
+      return phone;
+    };
+
+    // Estratégia 1: Tentar extrair número diretamente do webhook (para mensagens normais)
+    if (!isFromMe) {
+      // Tentar extrair número de diferentes campos do webhook
+      const possibleNumbers = [
+        messageData.number,
+        messageData.phone,
+        messageData.contactPhone,
+        messageData.from,
+        messageData.fromId,
+        messageData.contactId
+      ].filter(Boolean);
+
+      for (const num of possibleNumbers) {
+        if (isValidBrazilianPhone(num)) {
+          contactPhoneNumber = normalizePhoneNumber(num);
+          conditionalLog(from, '📱 Número extraído diretamente do webhook:', contactPhoneNumber);
+          break;
+        }
+      }
+    }
+
+    // Estratégia 2: Se não conseguiu extrair número válido OU é Messaging Echo, buscar no cache/perfil
+    const needsContactProfile = isFromMe || !contactPhoneNumber || !isValidBrazilianPhone(contactPhoneNumber);
     
-    if (contactData) {
-      conditionalLog(from, '📦 Cache hit para contato:', contactIdToUse);
-      // Extrair número do telefone dos dados em cache
-      contactPhoneNumber =
-        contactData.data?.number ||
-        contactData.number ||
-        contactData.phone ||
-        contactData.contactId ||
-        contactIdToUse;
-    } else {
-      try {
-        conditionalLog(from, '🔍 Buscando dados do contato:', contactIdToUse);
-        const contactResult = await digiSacApiService.getContactProfile(
-          contactIdToUse
-        );
-        if (contactResult.success && contactResult.data) {
-          // Armazenar dados completos do contato
-          contactData = contactResult.data;
-          
-          // Cachear por 15 minutos
-          cache.set(contactCacheKey, contactData, 900000);
-          conditionalLog(from, '📦 Cache set para contato:', contactIdToUse);
-
-          // Extrair número do telefone da estrutura correta do DigiSac
-          contactPhoneNumber =
-            contactResult.data.data?.number ||
-            contactResult.data.number ||
-            contactResult.data.phone ||
-            contactResult.data.contactId ||
-            contactIdToUse;
-          conditionalLog(
-            from,
-            '📱 Número do contato encontrado:',
-            contactPhoneNumber
+    if (needsContactProfile) {
+      conditionalLog(from, `🔍 ${isFromMe ? 'Messaging Echo' : 'Número inválido'} - buscando perfil do contato:`, contactIdToUse);
+      
+      // Verificar cache de contato primeiro
+      const contactCacheKey = `contact:${contactIdToUse}`;
+      contactData = cache.get(contactCacheKey);
+      
+      if (contactData) {
+        conditionalLog(from, '📦 Cache hit para contato:', contactIdToUse);
+        // Extrair número do telefone dos dados em cache
+        contactPhoneNumber =
+          contactData.data?.number ||
+          contactData.number ||
+          contactData.phone ||
+          contactData.contactId ||
+          contactIdToUse;
+      } else {
+        try {
+          conditionalLog(from, '🔍 Buscando dados do contato na API:', contactIdToUse);
+          const contactResult = await digiSacApiService.getContactProfile(
+            contactIdToUse
           );
-          conditionalLog(
-            from,
-            '👤 Dados completos do contato:',
-            process.env.LOG_LEVEL === 'debug' ? JSON.stringify(contactData, null, 2) : 'Dados do contato'
-          );
+          if (contactResult.success && contactResult.data) {
+            // Armazenar dados completos do contato
+            contactData = contactResult.data;
+            
+            // Cachear por 15 minutos
+            cache.set(contactCacheKey, contactData, 900000);
+            conditionalLog(from, '📦 Cache set para contato:', contactIdToUse);
 
-          // Log específico para verificar o nome
-          if (contactData.name) {
+            // Extrair número do telefone da estrutura correta do DigiSac
+            contactPhoneNumber =
+              contactResult.data.data?.number ||
+              contactResult.data.number ||
+              contactResult.data.phone ||
+              contactResult.data.contactId ||
+              contactIdToUse;
             conditionalLog(
               from,
-              '👤 Nome do contato encontrado:',
-              contactData.name
+              '📱 Número do contato encontrado via API:',
+              contactPhoneNumber
             );
+            conditionalLog(
+              from,
+              '👤 Dados completos do contato:',
+              process.env.LOG_LEVEL === 'debug' ? JSON.stringify(contactData, null, 2) : 'Dados do contato'
+            );
+
+            // Log específico para verificar o nome
+            if (contactData.name) {
+              conditionalLog(
+                from,
+                '👤 Nome do contato encontrado:',
+                contactData.name
+              );
+            }
+          } else {
+            conditionalLog(
+              from,
+              '⚠️ Não foi possível obter dados do contato, usando ID como fallback'
+            );
+            contactPhoneNumber = contactIdToUse;
           }
-        } else {
+        } catch (error) {
           conditionalLog(
             from,
-            '⚠️ Não foi possível obter dados do contato, usando ID como fallback'
+            '⚠️ Erro ao buscar dados do contato, usando ID como fallback:',
+            error.message
           );
           contactPhoneNumber = contactIdToUse;
         }
-      } catch (error) {
-        conditionalLog(
-          from,
-          '⚠️ Erro ao buscar dados do contato, usando ID como fallback:',
-          error.message
-        );
-        contactPhoneNumber = contactIdToUse;
       }
+    } else {
+      conditionalLog(from, '✅ Usando número extraído do webhook - sem necessidade de buscar perfil');
     }
 
     if (contactPhoneNumber && !contactPhoneNumber.startsWith('+')) {
