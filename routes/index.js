@@ -55,7 +55,9 @@ async function processMessageSending(
   conditionalLog(
     phoneNumber,
     '📦 Body recebido:',
-    process.env.LOG_LEVEL === 'debug' ? JSON.stringify(req.body, null, 2) : 'Body recebido (use LOG_LEVEL=debug para ver detalhes)'
+    process.env.LOG_LEVEL === 'debug'
+      ? JSON.stringify(req.body, null, 2)
+      : 'Body recebido (use LOG_LEVEL=debug para ver detalhes)'
   );
 
   // Se temos parâmetros de URL, logar eles
@@ -87,7 +89,9 @@ async function processMessageSending(
   conditionalLog(
     phoneNumber,
     '💬 Dados da mensagem:',
-    process.env.LOG_LEVEL === 'debug' ? JSON.stringify(messageData, null, 2) : { type: messageData.type, hasText: !!messageData.text }
+    process.env.LOG_LEVEL === 'debug'
+      ? JSON.stringify(messageData, null, 2)
+      : { type: messageData.type, hasText: !!messageData.text }
   );
 
   // Validar dados da mensagem
@@ -255,11 +259,13 @@ async function getChannelByServiceAndUser(serviceId, userId) {
  */
 async function getChannelsByServiceId(serviceId) {
   const cacheKey = `channels:${serviceId}`;
-  
+
   // Verificar cache primeiro
   const cached = cache.get(cacheKey);
   if (cached) {
-    alwaysLog(`📦 Cache hit para serviceId: ${serviceId} - ${cached.length} canais`);
+    alwaysLog(
+      `📦 Cache hit para serviceId: ${serviceId} - ${cached.length} canais`
+    );
     return cached;
   }
 
@@ -271,11 +277,13 @@ async function getChannelsByServiceId(serviceId) {
       const channels = result.data.results.filter(
         (item) => item.digisac_service_id === serviceId
       );
-      
+
       // Cachear por 10 minutos
       cache.set(cacheKey, channels, 600000);
-      alwaysLog(`📦 Cache set para serviceId: ${serviceId} - ${channels.length} canais`);
-      
+      alwaysLog(
+        `📦 Cache set para serviceId: ${serviceId} - ${channels.length} canais`
+      );
+
       return channels || [];
     }
 
@@ -360,7 +368,13 @@ async function sendMessageWithChannelToken(
     // Log detalhado do payload
     alwaysLog(
       '[RESPOND.IO] Payload completo:',
-      process.env.LOG_LEVEL === 'debug' ? JSON.stringify(webhookData, null, 2) : { channelId: webhookData.channelId, contactId: webhookData.contactId, eventType: webhookData.events?.[0]?.type }
+      process.env.LOG_LEVEL === 'debug'
+        ? JSON.stringify(webhookData, null, 2)
+        : {
+            channelId: webhookData.channelId,
+            contactId: webhookData.contactId,
+            eventType: webhookData.events?.[0]?.type,
+          }
     );
 
     // Log específico para verificar se o contact está presente
@@ -416,10 +430,6 @@ async function sendMessageWithChannelToken(
         data: response.data,
       });
     }
-
-
-
-
 
     return {
       success: true,
@@ -753,28 +763,41 @@ router.post('/digisac/webhook', async (req, res) => {
         messageData.contactPhone,
         messageData.from,
         messageData.fromId,
-        messageData.contactId
+        messageData.contactId,
       ].filter(Boolean);
 
       for (const num of possibleNumbers) {
         if (isValidBrazilianPhone(num)) {
           contactPhoneNumber = normalizePhoneNumber(num);
-          conditionalLog(from, '📱 Número extraído diretamente do webhook:', contactPhoneNumber);
+          conditionalLog(
+            from,
+            '📱 Número extraído diretamente do webhook:',
+            contactPhoneNumber
+          );
           break;
         }
       }
     }
 
     // Estratégia 2: Se não conseguiu extrair número válido OU é Messaging Echo, buscar no cache/perfil
-    const needsContactProfile = isFromMe || !contactPhoneNumber || !isValidBrazilianPhone(contactPhoneNumber);
-    
+    const needsContactProfile =
+      isFromMe ||
+      !contactPhoneNumber ||
+      !isValidBrazilianPhone(contactPhoneNumber);
+
     if (needsContactProfile) {
-      conditionalLog(from, `🔍 ${isFromMe ? 'Messaging Echo' : 'Número inválido'} - buscando perfil do contato:`, contactIdToUse);
-      
+      conditionalLog(
+        from,
+        `🔍 ${
+          isFromMe ? 'Messaging Echo' : 'Número inválido'
+        } - buscando perfil do contato:`,
+        contactIdToUse
+      );
+
       // Verificar cache de contato primeiro
       const contactCacheKey = `contact:${contactIdToUse}`;
       contactData = cache.get(contactCacheKey);
-      
+
       if (contactData) {
         conditionalLog(from, '📦 Cache hit para contato:', contactIdToUse);
         // Extrair número do telefone dos dados em cache
@@ -786,14 +809,18 @@ router.post('/digisac/webhook', async (req, res) => {
           contactIdToUse;
       } else {
         try {
-          conditionalLog(from, '🔍 Buscando dados do contato na API:', contactIdToUse);
+          conditionalLog(
+            from,
+            '🔍 Buscando dados do contato na API:',
+            contactIdToUse
+          );
           const contactResult = await digiSacApiService.getContactProfile(
             contactIdToUse
           );
           if (contactResult.success && contactResult.data) {
             // Armazenar dados completos do contato
             contactData = contactResult.data;
-            
+
             // Cachear por 15 minutos
             cache.set(contactCacheKey, contactData, 900000);
             conditionalLog(from, '📦 Cache set para contato:', contactIdToUse);
@@ -813,7 +840,9 @@ router.post('/digisac/webhook', async (req, res) => {
             conditionalLog(
               from,
               '👤 Dados completos do contato:',
-              process.env.LOG_LEVEL === 'debug' ? JSON.stringify(contactData, null, 2) : 'Dados do contato'
+              process.env.LOG_LEVEL === 'debug'
+                ? JSON.stringify(contactData, null, 2)
+                : 'Dados do contato'
             );
 
             // Log específico para verificar o nome
@@ -841,7 +870,10 @@ router.post('/digisac/webhook', async (req, res) => {
         }
       }
     } else {
-      conditionalLog(from, '✅ Usando número extraído do webhook - sem necessidade de buscar perfil');
+      conditionalLog(
+        from,
+        '✅ Usando número extraído do webhook - sem necessidade de buscar perfil'
+      );
     }
 
     if (contactPhoneNumber && !contactPhoneNumber.startsWith('+')) {
@@ -852,37 +884,9 @@ router.post('/digisac/webhook', async (req, res) => {
       }
     }
 
-    conditionalLog(
-      from,
-      '📱 ContactId final para respond.io:',
-      contactPhoneNumber
-    );
-
-    // Removido filtro SANDBOX - agora processa todas as mensagens
-
-    // Log detalhado da estrutura completa do webhook (só para números autorizados)
-    conditionalLog(
-      contactPhoneNumber,
-      '📥 Webhook DigiSac recebido - Estrutura completa:'
-    );
-    conditionalLog(
-      contactPhoneNumber,
-      '📋 Headers:',
-      process.env.LOG_LEVEL === 'debug' ? JSON.stringify(req.headers, null, 2) : 'Headers recebidos'
-    );
-    conditionalLog(
-      contactPhoneNumber,
-      '📦 Body completo:',
-      process.env.LOG_LEVEL === 'debug' ? JSON.stringify(req.body, null, 2) : 'Body recebido'
-    );
-    conditionalLog(contactPhoneNumber, '🔍 Event Type:', eventType);
-    conditionalLog(
-      contactPhoneNumber,
-      '🔍 Message Data:',
-      process.env.LOG_LEVEL === 'debug' ? JSON.stringify(messageData, null, 2) : { type: messageData.type, id: messageData.id }
-    );
-
-    // Só processar mensagens novas ou atualizadas que não são nossas
+    // EARLY RETURNS OTIMIZADOS - Validações rápidas antes de processar logs pesados
+    
+    // Validação 1: Dados essenciais
     if (!eventType || !messageData) {
       conditionalLog(
         contactPhoneNumber,
@@ -891,21 +895,52 @@ router.post('/digisac/webhook', async (req, res) => {
       return res.status(200).json({ status: 'ignored' });
     }
 
-    // Processar mensagens enviadas pelos agentes como Messaging Echoes
-    if (isFromMe) {
-      conditionalLog(
-        contactPhoneNumber,
-        '🔄 Processando mensagem do agente como Messaging Echo'
-      );
-    }
-
-    // Só processar eventos de mensagem criada ou atualizada
+    // Validação 2: Tipo de evento
     if (!eventType.includes('message.')) {
       conditionalLog(
         contactPhoneNumber,
         '⚠️ Webhook ignorado: não é evento de mensagem'
       );
       return res.status(200).json({ status: 'ignored' });
+    }
+
+    // Logs otimizados - só executar se passar pelas validações
+    conditionalLog(
+      contactPhoneNumber,
+      '📱 ContactId final para respond.io:',
+      contactPhoneNumber
+    );
+
+    // Logs detalhados apenas em modo debug
+    if (process.env.LOG_LEVEL === 'debug') {
+      conditionalLog(
+        contactPhoneNumber,
+        '📥 Webhook DigiSac recebido - Estrutura completa:'
+      );
+      conditionalLog(
+        contactPhoneNumber,
+        '📋 Headers:',
+        JSON.stringify(req.headers, null, 2)
+      );
+      conditionalLog(
+        contactPhoneNumber,
+        '📦 Body completo:',
+        JSON.stringify(req.body, null, 2)
+      );
+      conditionalLog(contactPhoneNumber, '🔍 Event Type:', eventType);
+      conditionalLog(
+        contactPhoneNumber,
+        '🔍 Message Data:',
+        JSON.stringify(messageData, null, 2)
+      );
+    }
+
+    // Log de Messaging Echo (sempre importante)
+    if (isFromMe) {
+      conditionalLog(
+        contactPhoneNumber,
+        '🔄 Processando mensagem do agente como Messaging Echo'
+      );
     }
 
     // Para mensagens de mídia, verificar se o arquivo está disponível
@@ -920,18 +955,18 @@ router.post('/digisac/webhook', async (req, res) => {
       }
     }
 
-    // VÍDEOS: Tentar buscar arquivo via API se não estiver disponível no webhook
+    // VÍDEOS: Processamento otimizado - timeout reduzido e fallback mais rápido
     if (
       messageType === 'video' &&
       (!messageData.file || !messageData.file.url)
     ) {
       conditionalLog(
         contactPhoneNumber,
-        '🎥 Vídeo detectado sem arquivo - tentando buscar via API...'
+        '🎥 Vídeo detectado sem arquivo - processamento otimizado iniciado...'
       );
 
-      // Aguardar um pouco para o processamento
-      await new Promise((resolve) => setTimeout(resolve, 3000)); // 3 segundos
+      // Timeout reduzido: 1 segundo em vez de 3
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       try {
         // Buscar mensagem com arquivo incluído
@@ -940,25 +975,27 @@ router.post('/digisac/webhook', async (req, res) => {
         if (result.success && result.data) {
           conditionalLog(
             contactPhoneNumber,
-            '📋 Resposta da API para vídeo:',
-            process.env.LOG_LEVEL === 'debug' ? JSON.stringify(result.data, null, 2) : { hasFile: !!result.data.file, hasUrl: !!result.data.file?.url }
+            '📋 Resposta da API para vídeo (tentativa 1):',
+            process.env.LOG_LEVEL === 'debug'
+              ? JSON.stringify(result.data, null, 2)
+              : { hasFile: !!result.data.file, hasUrl: !!result.data.file?.url }
           );
 
           // Verificar se o arquivo está disponível na resposta da API
           if (result.data.file && result.data.file.url) {
             conditionalLog(
               contactPhoneNumber,
-              '✅ Arquivo de vídeo encontrado via API!'
+              '✅ Arquivo de vídeo encontrado na primeira tentativa!'
             );
             // Atualizar dados da mensagem com os dados da API
             messageData = result.data;
           } else {
             conditionalLog(
               contactPhoneNumber,
-              '⚠️ Arquivo de vídeo ainda não disponível via API'
+              '⚠️ Arquivo de vídeo ainda não disponível - tentativa 2...'
             );
-            // Aguardar mais um pouco e tentar novamente
-            await new Promise((resolve) => setTimeout(resolve, 5000)); // +5 segundos
+            // Segunda tentativa com timeout reduzido: 1 segundo em vez de 5
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
             const retryResult = await digiSacApiService.getMessageWithFile(
               messageId
@@ -966,8 +1003,13 @@ router.post('/digisac/webhook', async (req, res) => {
             if (retryResult.success && retryResult.data) {
               conditionalLog(
                 contactPhoneNumber,
-                '📋 Resposta da segunda tentativa:',
-                process.env.LOG_LEVEL === 'debug' ? JSON.stringify(retryResult.data, null, 2) : { hasFile: !!retryResult.data.file, hasUrl: !!retryResult.data.file?.url }
+                '📋 Resposta da API para vídeo (tentativa 2):',
+                process.env.LOG_LEVEL === 'debug'
+                  ? JSON.stringify(retryResult.data, null, 2)
+                  : {
+                      hasFile: !!retryResult.data.file,
+                      hasUrl: !!retryResult.data.file?.url,
+                    }
               );
 
               if (retryResult.data.file && retryResult.data.file.url) {
@@ -979,7 +1021,7 @@ router.post('/digisac/webhook', async (req, res) => {
               } else {
                 conditionalLog(
                   contactPhoneNumber,
-                  '❌ Arquivo de vídeo não disponível após tentativas'
+                  '❌ Arquivo de vídeo não disponível após 2 tentativas - continuando com fallback'
                 );
                 // Continuar com processamento normal (enviará mensagem de texto)
               }
@@ -1051,12 +1093,11 @@ router.post('/digisac/webhook', async (req, res) => {
       messageBody = `📎 Mídia (${messageType})`;
     }
 
-    // Enviar para TODOS os canais que usam este service_id
-    let allResults = [];
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const channelConfig of channelConfigs) {
+    // Enviar para TODOS os canais que usam este service_id - PROCESSAMENTO PARALELO
+    alwaysLog(`[WEBHOOK][PARALLEL] Iniciando processamento paralelo para ${channelConfigs.length} canais`);
+    
+    // Criar array de promises para processamento paralelo
+    const channelPromises = channelConfigs.map(async (channelConfig) => {
       try {
         // Criar instância temporária do serviço Respond.io com token do canal
         const channelRespondService = {
@@ -1073,7 +1114,8 @@ router.post('/digisac/webhook', async (req, res) => {
         let respondResult;
 
         if (isFromMe) {
-          alwaysLog(
+          conditionalLog(
+            contactPhoneNumber,
             `[WEBHOOK][ECHO] Enviando echo do vendedor para canal Respond.io`,
             {
               canal: channelConfig.custom_channel_id,
@@ -1084,7 +1126,6 @@ router.post('/digisac/webhook', async (req, res) => {
           );
 
           // Para Messaging Echoes, usar os dados do contato que já foram buscados anteriormente
-          // O contactPhoneNumber já contém o número correto do contato que recebeu a mensagem
           respondResult = await sendMessageWithChannelToken(
             channelRespondService,
             processedMessage,
@@ -1095,7 +1136,8 @@ router.post('/digisac/webhook', async (req, res) => {
             true
           );
         } else {
-          alwaysLog(
+          conditionalLog(
+            contactPhoneNumber,
             `[WEBHOOK] Enviando mensagem do DigiSac para canal Respond.io`,
             {
               canal: channelConfig.custom_channel_id,
@@ -1116,34 +1158,14 @@ router.post('/digisac/webhook', async (req, res) => {
           );
         }
 
-        // Log do resultado para este canal
-        if (respondResult && respondResult.success) {
-          alwaysLog(`[WEBHOOK] Mensagem entregue para canal/vendedor`, {
-            canal: channelConfig.custom_channel_id,
-            vendedor: channelConfig.desc,
-            contactId: contactPhoneNumber,
-            isEcho: isFromMe,
-            messageId,
-          });
-          successCount++;
-        } else {
-          errorLog(`[WEBHOOK] Erro ao entregar mensagem para canal/vendedor`, {
-            canal: channelConfig.custom_channel_id,
-            vendedor: channelConfig.desc,
-            contactId: contactPhoneNumber,
-            isEcho: isFromMe,
-            messageId,
-            error: respondResult?.error,
-          });
-          errorCount++;
-        }
-
-        allResults.push({
+        // Retornar resultado para este canal
+        return {
           channelId: channelConfig.custom_channel_id,
           vendedor: channelConfig.desc,
           success: respondResult?.success || false,
           error: respondResult?.error || null,
-        });
+          respondResult: respondResult,
+        };
       } catch (error) {
         errorLog(`[WEBHOOK] Erro crítico ao processar canal/vendedor`, {
           canal: channelConfig.custom_channel_id,
@@ -1153,21 +1175,56 @@ router.post('/digisac/webhook', async (req, res) => {
           messageId,
           error: error.message,
         });
-        errorCount++;
-        allResults.push({
+        
+        return {
           channelId: channelConfig.custom_channel_id,
           vendedor: channelConfig.desc,
           success: false,
           error: error.message,
+          respondResult: null,
+        };
+      }
+    });
+
+    // Executar todas as promises em paralelo
+    const startTime = Date.now();
+    const allResults = await Promise.all(channelPromises);
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+
+    // Processar resultados
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const result of allResults) {
+      if (result.success) {
+        alwaysLog(`[WEBHOOK] Mensagem entregue para canal/vendedor`, {
+          canal: result.channelId,
+          vendedor: result.vendedor,
+          contactId: contactPhoneNumber,
+          isEcho: isFromMe,
+          messageId,
         });
+        successCount++;
+      } else {
+        errorLog(`[WEBHOOK] Erro ao entregar mensagem para canal/vendedor`, {
+          canal: result.channelId,
+          vendedor: result.vendedor,
+          contactId: contactPhoneNumber,
+          isEcho: isFromMe,
+          messageId,
+          error: result.error,
+        });
+        errorCount++;
       }
     }
 
-    // Log do resumo final
-    alwaysLog(`[WEBHOOK][SERVICE ${serviceId}] Resumo do processamento:`, {
+    // Log do resumo final com tempo de processamento
+    alwaysLog(`[WEBHOOK][SERVICE ${serviceId}] Resumo do processamento paralelo:`, {
       totalCanais: channelConfigs.length,
       sucessos: successCount,
       erros: errorCount,
+      tempoProcessamento: `${processingTime}ms`,
       messageId: messageId,
       isFromMe: isFromMe,
     });
