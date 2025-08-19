@@ -23,6 +23,7 @@ const {
   respondIoApiService,
   CHANNEL_API_TOKEN,
 } = require('../services/respond');
+const { cache } = require('../utils/cache');
 
 const router = express.Router();
 
@@ -253,6 +254,15 @@ async function getChannelByServiceAndUser(serviceId, userId) {
  * @returns {Promise<Array>} - Array de configurações de canais
  */
 async function getChannelsByServiceId(serviceId) {
+  const cacheKey = `channels:${serviceId}`;
+  
+  // Verificar cache primeiro
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    alwaysLog(`📦 Cache hit para serviceId: ${serviceId} - ${cached.length} canais`);
+    return cached;
+  }
+
   try {
     // Buscar todos os canais e filtrar por service_id
     const result = await referaApiService.callMessageTool();
@@ -261,6 +271,11 @@ async function getChannelsByServiceId(serviceId) {
       const channels = result.data.results.filter(
         (item) => item.digisac_service_id === serviceId
       );
+      
+      // Cachear por 10 minutos
+      cache.set(cacheKey, channels, 600000);
+      alwaysLog(`📦 Cache set para serviceId: ${serviceId} - ${channels.length} canais`);
+      
       return channels || [];
     }
 
@@ -710,55 +725,74 @@ router.post('/digisac/webhook', async (req, res) => {
       });
     }
 
-    try {
-      conditionalLog(from, '🔍 Buscando dados do contato:', contactIdToUse);
-      const contactResult = await digiSacApiService.getContactProfile(
-        contactIdToUse
-      );
-      if (contactResult.success && contactResult.data) {
-        // Armazenar dados completos do contato
-        contactData = contactResult.data;
-
-        // Extrair número do telefone da estrutura correta do DigiSac
-        contactPhoneNumber =
-          contactResult.data.data?.number ||
-          contactResult.data.number ||
-          contactResult.data.phone ||
-          contactResult.data.contactId ||
-          contactIdToUse;
-        conditionalLog(
-          from,
-          '📱 Número do contato encontrado:',
-          contactPhoneNumber
+    // Verificar cache de contato primeiro
+    const contactCacheKey = `contact:${contactIdToUse}`;
+    contactData = cache.get(contactCacheKey);
+    
+    if (contactData) {
+      conditionalLog(from, '📦 Cache hit para contato:', contactIdToUse);
+      // Extrair número do telefone dos dados em cache
+      contactPhoneNumber =
+        contactData.data?.number ||
+        contactData.number ||
+        contactData.phone ||
+        contactData.contactId ||
+        contactIdToUse;
+    } else {
+      try {
+        conditionalLog(from, '🔍 Buscando dados do contato:', contactIdToUse);
+        const contactResult = await digiSacApiService.getContactProfile(
+          contactIdToUse
         );
-        conditionalLog(
-          from,
-          '👤 Dados completos do contato:',
-          JSON.stringify(contactData, null, 2)
-        );
+        if (contactResult.success && contactResult.data) {
+          // Armazenar dados completos do contato
+          contactData = contactResult.data;
+          
+          // Cachear por 15 minutos
+          cache.set(contactCacheKey, contactData, 900000);
+          conditionalLog(from, '📦 Cache set para contato:', contactIdToUse);
 
-        // Log específico para verificar o nome
-        if (contactData.name) {
+          // Extrair número do telefone da estrutura correta do DigiSac
+          contactPhoneNumber =
+            contactResult.data.data?.number ||
+            contactResult.data.number ||
+            contactResult.data.phone ||
+            contactResult.data.contactId ||
+            contactIdToUse;
           conditionalLog(
             from,
-            '👤 Nome do contato encontrado:',
-            contactData.name
+            '📱 Número do contato encontrado:',
+            contactPhoneNumber
           );
+          conditionalLog(
+            from,
+            '👤 Dados completos do contato:',
+            process.env.LOG_LEVEL === 'debug' ? JSON.stringify(contactData, null, 2) : 'Dados do contato'
+          );
+
+          // Log específico para verificar o nome
+          if (contactData.name) {
+            conditionalLog(
+              from,
+              '👤 Nome do contato encontrado:',
+              contactData.name
+            );
+          }
+        } else {
+          conditionalLog(
+            from,
+            '⚠️ Não foi possível obter dados do contato, usando ID como fallback'
+          );
+          contactPhoneNumber = contactIdToUse;
         }
-      } else {
+      } catch (error) {
         conditionalLog(
           from,
-          '⚠️ Não foi possível obter dados do contato, usando ID como fallback'
+          '⚠️ Erro ao buscar dados do contato, usando ID como fallback:',
+          error.message
         );
         contactPhoneNumber = contactIdToUse;
       }
-    } catch (error) {
-      conditionalLog(
-        from,
-        '⚠️ Erro ao buscar dados do contato, usando ID como fallback:',
-        error.message
-      );
-      contactPhoneNumber = contactIdToUse;
     }
 
     if (contactPhoneNumber && !contactPhoneNumber.startsWith('+')) {
@@ -1175,6 +1209,7 @@ router.get('/health', (req, res) => {
       respondIo: respondIoApiService.getConfigInfo(),
       refera: referaApiService.getConfigInfo(),
     },
+    cache: cache.getStats(),
   });
 });
 

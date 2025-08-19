@@ -41,10 +41,10 @@ class ReferaApiService {
     this.http = axios.create({
       baseURL: this.baseURL,
       timeout: parseInt(process.env.HTTP_TIMEOUT_MS || '8000', 10),
-      httpsAgent: new https.Agent({ 
-        keepAlive: true, 
+      httpsAgent: new https.Agent({
+        keepAlive: true,
         maxSockets: 50,
-        timeout: 60000 
+        timeout: 60000,
       }),
     });
   }
@@ -168,30 +168,34 @@ class ReferaApiService {
     try {
       apiLog('🔐 Fazendo login na API da Refera...');
 
-      const response = await this.http.post('/login/', {
-        email: this.username,
-        password: this.password,
-      }, {
-        headers: {
-          accept: 'application/json, text/plain, /',
-          'accept-language':
-            'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh-TW;q=0.5,zh;q=0.4',
-          'api-key': this.apiKey,
-          'content-type': 'application/json; charset=UTF-8',
-          origin: 'https://admin.refera.com.br',
-          priority: 'u=1, i',
-          referer: 'https://admin.refera.com.br/',
-          'sec-ch-ua':
-            '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
-          'sec-ch-ua-mobile': '?0',
-          'sec-ch-ua-platform': '"Windows"',
-          'sec-fetch-dest': 'empty',
-          'sec-fetch-mode': 'cors',
-          'sec-fetch-site': 'same-site',
-          'user-agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+      const response = await this.http.post(
+        '/login/',
+        {
+          email: this.username,
+          password: this.password,
         },
-      });
+        {
+          headers: {
+            accept: 'application/json, text/plain, /',
+            'accept-language':
+              'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh-TW;q=0.5,zh;q=0.4',
+            'api-key': this.apiKey,
+            'content-type': 'application/json; charset=UTF-8',
+            origin: 'https://admin.refera.com.br',
+            priority: 'u=1, i',
+            referer: 'https://admin.refera.com.br/',
+            'sec-ch-ua':
+              '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-site',
+            'user-agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+          },
+        }
+      );
 
       if (response.data && response.data.access) {
         this.accessToken = response.data.access;
