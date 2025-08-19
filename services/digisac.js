@@ -181,7 +181,7 @@ class DigiSacApiService {
       const url = `${this.baseURL}/messages/${messageId}?include[0]=file`;
 
       apiLog('🔍 [API DEBUG] Fazendo requisição para:', url);
-      apiLog('🔍 [API DEBUG] Headers:', JSON.stringify(this.headers, null, 2));
+      apiLog('🔍 [API DEBUG] Headers:', process.env.LOG_LEVEL === 'debug' ? JSON.stringify(this.headers, null, 2) : 'Headers configurados');
 
       const response = await axios.get(url, {
         headers: this.headers,
@@ -191,9 +191,9 @@ class DigiSacApiService {
       apiLog('📋 [API DEBUG] Status:', response.status);
       apiLog(
         '📋 [API DEBUG] Headers:',
-        JSON.stringify(response.headers, null, 2)
+        process.env.LOG_LEVEL === 'debug' ? JSON.stringify(response.headers, null, 2) : 'Headers da resposta'
       );
-      apiLog('📦 [API DEBUG] Body:', JSON.stringify(response.data, null, 2));
+      apiLog('📦 [API DEBUG] Body:', process.env.LOG_LEVEL === 'debug' ? JSON.stringify(response.data, null, 2) : 'Dados da resposta');
 
       return {
         success: true,
@@ -204,11 +204,11 @@ class DigiSacApiService {
       apiLog('📋 [API DEBUG] Status:', error.response?.status);
       apiLog(
         '📋 [API DEBUG] Headers:',
-        JSON.stringify(error.response?.headers, null, 2)
+        process.env.LOG_LEVEL === 'debug' ? JSON.stringify(error.response?.headers, null, 2) : 'Headers do erro'
       );
       apiLog(
         '📦 [API DEBUG] Body:',
-        JSON.stringify(error.response?.data, null, 2)
+        process.env.LOG_LEVEL === 'debug' ? JSON.stringify(error.response?.data, null, 2) : 'Dados do erro'
       );
       apiLog('📦 [API DEBUG] Error:', error.message);
 
@@ -255,12 +255,12 @@ class DigiSacApiService {
       conditionalLog(
         phoneNumber,
         '📋 Headers:',
-        JSON.stringify(response.headers, null, 2)
+        process.env.LOG_LEVEL === 'debug' ? JSON.stringify(response.headers, null, 2) : 'Headers da resposta'
       );
       conditionalLog(
         phoneNumber,
         '📦 Body:',
-        JSON.stringify(response.data, null, 2)
+        process.env.LOG_LEVEL === 'debug' ? JSON.stringify(response.data, null, 2) : 'Dados do contato'
       );
 
       return {
@@ -270,8 +270,8 @@ class DigiSacApiService {
     } catch (error) {
       errorLog('❌ DigiSac API - Erro ao obter perfil:');
       apiLog('📋 Status:', error.response?.status);
-      apiLog('📋 Headers:', JSON.stringify(error.response?.headers, null, 2));
-      apiLog('📦 Body:', JSON.stringify(error.response?.data, null, 2));
+      apiLog('📋 Headers:', process.env.LOG_LEVEL === 'debug' ? JSON.stringify(error.response?.headers, null, 2) : 'Headers do erro');
+      apiLog('📦 Body:', process.env.LOG_LEVEL === 'debug' ? JSON.stringify(error.response?.data, null, 2) : 'Dados do erro');
       apiLog('📦 Error:', error.message);
 
       return {

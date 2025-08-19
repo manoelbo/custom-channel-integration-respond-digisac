@@ -91,7 +91,7 @@ class ReferaApiService {
       apiLog('📋 Status HTTP:', error.response.status);
     }
     if (error.response?.data) {
-      apiLog('📦 Dados do erro:', JSON.stringify(error.response.data, null, 2));
+      apiLog('📦 Dados do erro:', process.env.LOG_LEVEL === 'debug' ? JSON.stringify(error.response.data, null, 2) : 'Dados do erro');
     }
   }
 

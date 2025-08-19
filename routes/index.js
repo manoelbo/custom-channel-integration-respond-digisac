@@ -54,7 +54,7 @@ async function processMessageSending(
   conditionalLog(
     phoneNumber,
     '📦 Body recebido:',
-    JSON.stringify(req.body, null, 2)
+    process.env.LOG_LEVEL === 'debug' ? JSON.stringify(req.body, null, 2) : 'Body recebido (use LOG_LEVEL=debug para ver detalhes)'
   );
 
   // Se temos parâmetros de URL, logar eles
@@ -86,7 +86,7 @@ async function processMessageSending(
   conditionalLog(
     phoneNumber,
     '💬 Dados da mensagem:',
-    JSON.stringify(messageData, null, 2)
+    process.env.LOG_LEVEL === 'debug' ? JSON.stringify(messageData, null, 2) : { type: messageData.type, hasText: !!messageData.text }
   );
 
   // Validar dados da mensagem
@@ -345,7 +345,7 @@ async function sendMessageWithChannelToken(
     // Log detalhado do payload
     alwaysLog(
       '[RESPOND.IO] Payload completo:',
-      JSON.stringify(webhookData, null, 2)
+      process.env.LOG_LEVEL === 'debug' ? JSON.stringify(webhookData, null, 2) : { channelId: webhookData.channelId, contactId: webhookData.contactId, eventType: webhookData.events?.[0]?.type }
     );
 
     // Log específico para verificar se o contact está presente
@@ -402,94 +402,9 @@ async function sendMessageWithChannelToken(
       });
     }
 
-    // TESTE: Enviar payload idêntico ao curl que funciona
-    try {
-      const testPayload = {
-        channelId: channelService.channelId,
-        contactId: contactPhoneNumber,
-        events: [
-          {
-            type: 'message',
-            mId: messageId,
-            timestamp: timestamp,
-            message: {
-              type: 'text',
-              text: messageData.text || 'Teste idêntico ao curl',
-            },
-          },
-        ],
-      };
 
-      alwaysLog(
-        '[RESPOND.IO] TESTE - Payload idêntico ao curl:',
-        JSON.stringify(testPayload, null, 2)
-      );
 
-      const testResponse = await axios({
-        method: 'post',
-        url: 'https://app.respond.io/custom/channel/webhook/',
-        headers: {
-          authorization: `Bearer ${channelService.token}`,
-          'content-type': 'application/json',
-        },
-        data: testPayload,
-      });
 
-      alwaysLog('[RESPOND.IO] TESTE - Resposta do curl idêntico:', {
-        status: testResponse.status,
-        data: testResponse.data,
-      });
-    } catch (testError) {
-      errorLog(
-        '[RESPOND.IO] TESTE - Erro no curl idêntico:',
-        testError.message
-      );
-    }
-
-    // Enviar confirmação de status da mensagem
-    try {
-      const statusPayload = {
-        channelId: channelService.channelId,
-        contactId: contactPhoneNumber,
-        events: [
-          {
-            type: 'message_status',
-            mId: messageId,
-            timestamp: timestamp,
-            status: {
-              value: 'delivered',
-              message: 'Message delivered successfully',
-            },
-          },
-        ],
-      };
-
-      alwaysLog(
-        '[RESPOND.IO] Enviando confirmação de status:',
-        JSON.stringify(statusPayload, null, 2)
-      );
-
-      const statusResponse = await axios({
-        method: 'post',
-        url: 'https://app.respond.io/custom/channel/webhook/',
-        headers: {
-          authorization: `Bearer ${channelService.token}`,
-          'content-type': 'application/json',
-          'cache-control': 'no-cache',
-        },
-        data: statusPayload,
-      });
-
-      alwaysLog('[RESPOND.IO] Confirmação de status enviada:', {
-        status: statusResponse.status,
-        data: statusResponse.data,
-      });
-    } catch (statusError) {
-      errorLog(
-        '[RESPOND.IO] Erro ao enviar confirmação de status:',
-        statusError.message
-      );
-    }
 
     return {
       success: true,
@@ -870,18 +785,18 @@ router.post('/digisac/webhook', async (req, res) => {
     conditionalLog(
       contactPhoneNumber,
       '📋 Headers:',
-      JSON.stringify(req.headers, null, 2)
+      process.env.LOG_LEVEL === 'debug' ? JSON.stringify(req.headers, null, 2) : 'Headers recebidos'
     );
     conditionalLog(
       contactPhoneNumber,
       '📦 Body completo:',
-      JSON.stringify(req.body, null, 2)
+      process.env.LOG_LEVEL === 'debug' ? JSON.stringify(req.body, null, 2) : 'Body recebido'
     );
     conditionalLog(contactPhoneNumber, '🔍 Event Type:', eventType);
     conditionalLog(
       contactPhoneNumber,
       '🔍 Message Data:',
-      JSON.stringify(messageData, null, 2)
+      process.env.LOG_LEVEL === 'debug' ? JSON.stringify(messageData, null, 2) : { type: messageData.type, id: messageData.id }
     );
 
     // Só processar mensagens novas ou atualizadas que não são nossas
@@ -942,8 +857,8 @@ router.post('/digisac/webhook', async (req, res) => {
         if (result.success && result.data) {
           conditionalLog(
             contactPhoneNumber,
-            '📋 Resposta completa da API para vídeo:',
-            JSON.stringify(result.data, null, 2)
+            '📋 Resposta da API para vídeo:',
+            process.env.LOG_LEVEL === 'debug' ? JSON.stringify(result.data, null, 2) : { hasFile: !!result.data.file, hasUrl: !!result.data.file?.url }
           );
 
           // Verificar se o arquivo está disponível na resposta da API
@@ -969,7 +884,7 @@ router.post('/digisac/webhook', async (req, res) => {
               conditionalLog(
                 contactPhoneNumber,
                 '📋 Resposta da segunda tentativa:',
-                JSON.stringify(retryResult.data, null, 2)
+                process.env.LOG_LEVEL === 'debug' ? JSON.stringify(retryResult.data, null, 2) : { hasFile: !!retryResult.data.file, hasUrl: !!retryResult.data.file?.url }
               );
 
               if (retryResult.data.file && retryResult.data.file.url) {
