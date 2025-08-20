@@ -885,7 +885,7 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     // EARLY RETURNS OTIMIZADOS - Validações rápidas antes de processar logs pesados
-    
+
     // Validação 1: Dados essenciais
     if (!eventType || !messageData) {
       conditionalLog(
@@ -1094,8 +1094,10 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     // Enviar para TODOS os canais que usam este service_id - PROCESSAMENTO PARALELO
-    alwaysLog(`[WEBHOOK][PARALLEL] Iniciando processamento paralelo para ${channelConfigs.length} canais`);
-    
+    alwaysLog(
+      `[WEBHOOK][PARALLEL] Iniciando processamento paralelo para ${channelConfigs.length} canais`
+    );
+
     // Criar array de promises para processamento paralelo
     const channelPromises = channelConfigs.map(async (channelConfig) => {
       try {
@@ -1175,7 +1177,7 @@ router.post('/digisac/webhook', async (req, res) => {
           messageId,
           error: error.message,
         });
-        
+
         return {
           channelId: channelConfig.custom_channel_id,
           vendedor: channelConfig.desc,
@@ -1220,14 +1222,17 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     // Log do resumo final com tempo de processamento
-    alwaysLog(`[WEBHOOK][SERVICE ${serviceId}] Resumo do processamento paralelo:`, {
-      totalCanais: channelConfigs.length,
-      sucessos: successCount,
-      erros: errorCount,
-      tempoProcessamento: `${processingTime}ms`,
-      messageId: messageId,
-      isFromMe: isFromMe,
-    });
+    alwaysLog(
+      `[WEBHOOK][SERVICE ${serviceId}] Resumo do processamento paralelo:`,
+      {
+        totalCanais: channelConfigs.length,
+        sucessos: successCount,
+        erros: errorCount,
+        tempoProcessamento: `${processingTime}ms`,
+        messageId: messageId,
+        isFromMe: isFromMe,
+      }
+    );
 
     // Responder ao DigiSac que recebemos o webhook
     res
