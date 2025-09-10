@@ -485,9 +485,10 @@ class DigiSacApiService {
   processDigiSacFile(messageData, phoneNumber) {
     // DigiSac usa AMBAS as estruturas: 'files' (array) E 'file' (objeto)
     const files = messageData.files;
-    const fileFromArray = files && Array.isArray(files) && files.length > 0 ? files[0] : null;
+    const fileFromArray =
+      files && Array.isArray(files) && files.length > 0 ? files[0] : null;
     const fileFromObject = messageData.file;
-    
+
     // Usar qualquer uma das estruturas que estiver disponível
     const file = fileFromArray || fileFromObject;
 

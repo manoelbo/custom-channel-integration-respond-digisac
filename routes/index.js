@@ -727,7 +727,7 @@ router.post('/digisac/webhook', async (req, res) => {
       ? messageData[0]
       : messageData;
 
-    if (messageCache.isDuplicate(messageToCheck)) {
+    if (messageCache && messageCache.isDuplicate(messageToCheck)) {
       const processingTime = Date.now() - startTime;
       console.log('⚠️ MENSAGEM DUPLICADA IGNORADA');
       console.log(`🆔 Webhook ID: ${webhookId}`);
@@ -1133,29 +1133,87 @@ router.post('/digisac/webhook', async (req, res) => {
         messageData.files.length > 0;
       const hasFilesUrl = hasFiles && messageData.files[0]?.url;
       const hasFileUrl = messageData.file && messageData.file.url;
-      
+
       // Arquivo disponível se QUALQUER uma das estruturas tiver URL
       const hasUrl = hasFilesUrl || hasFileUrl;
 
       if (!hasUrl) {
-        console.log('⚠️ MÍDIA IGNORADA: arquivo ainda não processado');
-        console.log(`📊 DEBUG - hasFiles: ${hasFiles}, hasFilesUrl: ${hasFilesUrl}, hasFileUrl: ${hasFileUrl}`);
-        conditionalLog(
-          contactPhoneNumber,
-          '⚠️ Webhook ignorado: arquivo ainda não processado'
+        console.log('⚠️ MÍDIA SEM ARQUIVO: tentando buscar via API DigiSac');
+        console.log(
+          `📊 DEBUG - hasFiles: ${hasFiles}, hasFilesUrl: ${hasFilesUrl}, hasFileUrl: ${hasFileUrl}`
         );
-        return res.status(200).json({
-          status: 'ignored',
-          reason: 'Arquivo de mídia ainda não processado',
-          messageType: messageType,
-          hasFiles: hasFiles,
-          hasFilesUrl: hasFilesUrl,
-          hasFileUrl: hasFileUrl,
-          filesCount: messageData.files?.length || 0,
-        });
+        
+        // Tentar buscar arquivo via API DigiSac
+        try {
+          console.log(`🔍 Buscando arquivo via API para messageId: ${messageId}`);
+          
+          // Aguardar um pouco para o DigiSac processar
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // 2 segundos
+          
+          const result = await retryManager.executeHttpWithRetry(
+            () => digiSacApiService.getMessageWithFile(messageId),
+            {
+              operation: 'Buscar arquivo de mídia DigiSac',
+              webhookId: webhookId,
+              messageId: messageId,
+            }
+          );
+
+          if (result.success && result.data) {
+            // Verificar se agora tem arquivo
+            const newHasFilesUrl = result.data.files && result.data.files[0]?.url;
+            const newHasFileUrl = result.data.file && result.data.file.url;
+            
+            if (newHasFilesUrl || newHasFileUrl) {
+              console.log(`✅ ARQUIVO ENCONTRADO VIA API!`);
+              messageData = result.data; // Atualizar dados da mensagem
+            } else {
+              console.log(`⚠️ ARQUIVO AINDA NÃO DISPONÍVEL VIA API`);
+              conditionalLog(
+                contactPhoneNumber,
+                '⚠️ Webhook ignorado: arquivo ainda não processado após API'
+              );
+              return res.status(200).json({
+                status: 'ignored',
+                reason: 'Arquivo de mídia ainda não processado após API',
+                messageType: messageType,
+                hasFiles: hasFiles,
+                hasFilesUrl: hasFilesUrl,
+                hasFileUrl: hasFileUrl,
+                filesCount: messageData.files?.length || 0,
+              });
+            }
+          } else {
+            console.log(`❌ ERRO AO BUSCAR VIA API:`, result.error);
+            conditionalLog(
+              contactPhoneNumber,
+              '⚠️ Webhook ignorado: erro ao buscar arquivo via API'
+            );
+            return res.status(200).json({
+              status: 'ignored',
+              reason: 'Erro ao buscar arquivo via API',
+              messageType: messageType,
+              error: result.error,
+            });
+          }
+        } catch (error) {
+          console.log(`❌ EXCEÇÃO AO BUSCAR VIA API:`, error.message);
+          conditionalLog(
+            contactPhoneNumber,
+            '⚠️ Webhook ignorado: exceção ao buscar arquivo via API'
+          );
+          return res.status(200).json({
+            status: 'ignored',
+            reason: 'Exceção ao buscar arquivo via API',
+            messageType: messageType,
+            error: error.message,
+          });
+        }
       }
 
-      const fileUrl = hasFilesUrl ? messageData.files[0].url : messageData.file.url;
+      const fileUrl = hasFilesUrl
+        ? messageData.files[0].url
+        : messageData.file.url;
       console.log(`✅ MÍDIA OK: arquivo disponível - ${fileUrl}`);
     }
 
@@ -1197,7 +1255,10 @@ router.post('/digisac/webhook', async (req, res) => {
           );
 
           // Verificar se o arquivo está disponível na resposta da API (ambas estruturas)
-          if ((result.data.files && result.data.files[0]?.url) || (result.data.file && result.data.file.url)) {
+          if (
+            (result.data.files && result.data.files[0]?.url) ||
+            (result.data.file && result.data.file.url)
+          ) {
             conditionalLog(
               contactPhoneNumber,
               '✅ Arquivo de vídeo encontrado na primeira tentativa!'
@@ -1232,7 +1293,10 @@ router.post('/digisac/webhook', async (req, res) => {
                     }
               );
 
-              if ((retryResult.data.files && retryResult.data.files[0]?.url) || (retryResult.data.file && retryResult.data.file.url)) {
+              if (
+                (retryResult.data.files && retryResult.data.files[0]?.url) ||
+                (retryResult.data.file && retryResult.data.file.url)
+              ) {
                 conditionalLog(
                   contactPhoneNumber,
                   '✅ Arquivo de vídeo encontrado na segunda tentativa!'
@@ -1481,12 +1545,14 @@ router.post('/digisac/webhook', async (req, res) => {
     );
 
     // Marcar mensagem como processada no cache
-    messageCache.markAsProcessed(messageToCheck, {
-      webhookId: webhookId,
-      successCount: successCount,
-      errorCount: errorCount,
-      channelsProcessed: channelConfigs.length,
-    });
+    if (messageCache && messageCache.markAsProcessed) {
+      messageCache.markAsProcessed(messageToCheck, {
+        webhookId: webhookId,
+        successCount: successCount,
+        errorCount: errorCount,
+        channelsProcessed: channelConfigs.length,
+      });
+    }
 
     // Log de sucesso completo
     const totalProcessingTime = Date.now() - startTime;
