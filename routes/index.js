@@ -1102,25 +1102,44 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     // Para mensagens de mídia, verificar se o arquivo está disponível
-    // DigiSac usa campo 'files' (array) em vez de 'file' (objeto)
+    // DigiSac usa AMBAS as estruturas: 'files' (array) E 'file' (objeto)
     if (['image', 'audio', 'ptt', 'document'].includes(messageType)) {
       // Log detalhado para debug de mídia
       console.log(`📸 DEBUG MÍDIA - Tipo: ${messageType}`);
       console.log(`📁 DEBUG MÍDIA - Tem files:`, !!messageData.files);
-      console.log(`📊 DEBUG MÍDIA - Files length:`, messageData.files?.length || 0);
-      console.log(`🔗 DEBUG MÍDIA - Files[0] URL:`, messageData.files?.[0]?.url);
+      console.log(`📁 DEBUG MÍDIA - Tem file:`, !!messageData.file);
+      console.log(
+        `📊 DEBUG MÍDIA - Files length:`,
+        messageData.files?.length || 0
+      );
+      console.log(
+        `🔗 DEBUG MÍDIA - Files[0] URL:`,
+        messageData.files?.[0]?.url
+      );
+      console.log(`🔗 DEBUG MÍDIA - File URL:`, messageData.file?.url);
       console.log(
         `📋 DEBUG MÍDIA - Estrutura files:`,
         JSON.stringify(messageData.files, null, 2)
       );
+      console.log(
+        `📋 DEBUG MÍDIA - Estrutura file:`,
+        JSON.stringify(messageData.file, null, 2)
+      );
 
-      // Verificar se tem arquivos e se o primeiro tem URL
-      const hasFiles = messageData.files && Array.isArray(messageData.files) && messageData.files.length > 0;
-      const hasUrl = hasFiles && messageData.files[0]?.url;
+      // Verificar AMBAS as estruturas (files[] OU file.url)
+      const hasFiles =
+        messageData.files &&
+        Array.isArray(messageData.files) &&
+        messageData.files.length > 0;
+      const hasFilesUrl = hasFiles && messageData.files[0]?.url;
+      const hasFileUrl = messageData.file && messageData.file.url;
+      
+      // Arquivo disponível se QUALQUER uma das estruturas tiver URL
+      const hasUrl = hasFilesUrl || hasFileUrl;
 
-      if (!hasFiles || !hasUrl) {
+      if (!hasUrl) {
         console.log('⚠️ MÍDIA IGNORADA: arquivo ainda não processado');
-        console.log(`📊 DEBUG - hasFiles: ${hasFiles}, hasUrl: ${hasUrl}`);
+        console.log(`📊 DEBUG - hasFiles: ${hasFiles}, hasFilesUrl: ${hasFilesUrl}, hasFileUrl: ${hasFileUrl}`);
         conditionalLog(
           contactPhoneNumber,
           '⚠️ Webhook ignorado: arquivo ainda não processado'
@@ -1130,18 +1149,21 @@ router.post('/digisac/webhook', async (req, res) => {
           reason: 'Arquivo de mídia ainda não processado',
           messageType: messageType,
           hasFiles: hasFiles,
-          hasUrl: hasUrl,
-          filesCount: messageData.files?.length || 0
+          hasFilesUrl: hasFilesUrl,
+          hasFileUrl: hasFileUrl,
+          filesCount: messageData.files?.length || 0,
         });
       }
 
-      console.log(`✅ MÍDIA OK: arquivo disponível - ${messageData.files[0].url}`);
+      const fileUrl = hasFilesUrl ? messageData.files[0].url : messageData.file.url;
+      console.log(`✅ MÍDIA OK: arquivo disponível - ${fileUrl}`);
     }
 
     // VÍDEOS: Processamento otimizado - timeout reduzido e fallback mais rápido
     if (
       messageType === 'video' &&
-      (!messageData.files || !messageData.files[0]?.url)
+      (!messageData.files || !messageData.files[0]?.url) &&
+      (!messageData.file || !messageData.file.url)
     ) {
       conditionalLog(
         contactPhoneNumber,
@@ -1168,11 +1190,14 @@ router.post('/digisac/webhook', async (req, res) => {
             '📋 Resposta da API para vídeo (tentativa 1):',
             process.env.LOG_LEVEL === 'debug'
               ? JSON.stringify(result.data, null, 2)
-              : { hasFiles: !!result.data.files, hasUrl: !!result.data.files?.[0]?.url }
+              : {
+                  hasFiles: !!result.data.files,
+                  hasUrl: !!result.data.files?.[0]?.url,
+                }
           );
 
-          // Verificar se o arquivo está disponível na resposta da API
-          if (result.data.files && result.data.files[0]?.url) {
+          // Verificar se o arquivo está disponível na resposta da API (ambas estruturas)
+          if ((result.data.files && result.data.files[0]?.url) || (result.data.file && result.data.file.url)) {
             conditionalLog(
               contactPhoneNumber,
               '✅ Arquivo de vídeo encontrado na primeira tentativa!'
@@ -1207,7 +1232,7 @@ router.post('/digisac/webhook', async (req, res) => {
                     }
               );
 
-              if (retryResult.data.files && retryResult.data.files[0]?.url) {
+              if ((retryResult.data.files && retryResult.data.files[0]?.url) || (retryResult.data.file && retryResult.data.file.url)) {
                 conditionalLog(
                   contactPhoneNumber,
                   '✅ Arquivo de vídeo encontrado na segunda tentativa!'
