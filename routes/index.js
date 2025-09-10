@@ -1102,23 +1102,25 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     // Para mensagens de mídia, verificar se o arquivo está disponível
-    // VÍDEOS: Ignorar se não tiver arquivo (DigiSac não envia URL no webhook inicial)
+    // DigiSac usa campo 'files' (array) em vez de 'file' (objeto)
     if (['image', 'audio', 'ptt', 'document'].includes(messageType)) {
       // Log detalhado para debug de mídia
       console.log(`📸 DEBUG MÍDIA - Tipo: ${messageType}`);
-      console.log(`📁 DEBUG MÍDIA - Tem file:`, !!messageData.file);
-      console.log(`🔗 DEBUG MÍDIA - Tem URL:`, !!messageData.file?.url);
+      console.log(`📁 DEBUG MÍDIA - Tem files:`, !!messageData.files);
+      console.log(`📊 DEBUG MÍDIA - Files length:`, messageData.files?.length || 0);
+      console.log(`🔗 DEBUG MÍDIA - Files[0] URL:`, messageData.files?.[0]?.url);
       console.log(
-        `📋 DEBUG MÍDIA - Estrutura file:`,
-        JSON.stringify(messageData.file, null, 2)
-      );
-      console.log(
-        `📦 DEBUG MÍDIA - messageData completo:`,
-        JSON.stringify(messageData, null, 2)
+        `📋 DEBUG MÍDIA - Estrutura files:`,
+        JSON.stringify(messageData.files, null, 2)
       );
 
-      if (!messageData.file || !messageData.file.url) {
+      // Verificar se tem arquivos e se o primeiro tem URL
+      const hasFiles = messageData.files && Array.isArray(messageData.files) && messageData.files.length > 0;
+      const hasUrl = hasFiles && messageData.files[0]?.url;
+
+      if (!hasFiles || !hasUrl) {
         console.log('⚠️ MÍDIA IGNORADA: arquivo ainda não processado');
+        console.log(`📊 DEBUG - hasFiles: ${hasFiles}, hasUrl: ${hasUrl}`);
         conditionalLog(
           contactPhoneNumber,
           '⚠️ Webhook ignorado: arquivo ainda não processado'
@@ -1127,18 +1129,19 @@ router.post('/digisac/webhook', async (req, res) => {
           status: 'ignored',
           reason: 'Arquivo de mídia ainda não processado',
           messageType: messageType,
-          hasFile: !!messageData.file,
-          hasUrl: !!messageData.file?.url,
+          hasFiles: hasFiles,
+          hasUrl: hasUrl,
+          filesCount: messageData.files?.length || 0
         });
       }
 
-      console.log(`✅ MÍDIA OK: arquivo disponível - ${messageData.file.url}`);
+      console.log(`✅ MÍDIA OK: arquivo disponível - ${messageData.files[0].url}`);
     }
 
     // VÍDEOS: Processamento otimizado - timeout reduzido e fallback mais rápido
     if (
       messageType === 'video' &&
-      (!messageData.file || !messageData.file.url)
+      (!messageData.files || !messageData.files[0]?.url)
     ) {
       conditionalLog(
         contactPhoneNumber,
@@ -1165,11 +1168,11 @@ router.post('/digisac/webhook', async (req, res) => {
             '📋 Resposta da API para vídeo (tentativa 1):',
             process.env.LOG_LEVEL === 'debug'
               ? JSON.stringify(result.data, null, 2)
-              : { hasFile: !!result.data.file, hasUrl: !!result.data.file?.url }
+              : { hasFiles: !!result.data.files, hasUrl: !!result.data.files?.[0]?.url }
           );
 
           // Verificar se o arquivo está disponível na resposta da API
-          if (result.data.file && result.data.file.url) {
+          if (result.data.files && result.data.files[0]?.url) {
             conditionalLog(
               contactPhoneNumber,
               '✅ Arquivo de vídeo encontrado na primeira tentativa!'
@@ -1199,12 +1202,12 @@ router.post('/digisac/webhook', async (req, res) => {
                 process.env.LOG_LEVEL === 'debug'
                   ? JSON.stringify(retryResult.data, null, 2)
                   : {
-                      hasFile: !!retryResult.data.file,
-                      hasUrl: !!retryResult.data.file?.url,
+                      hasFiles: !!retryResult.data.files,
+                      hasUrl: !!retryResult.data.files?.[0]?.url,
                     }
               );
 
-              if (retryResult.data.file && retryResult.data.file.url) {
+              if (retryResult.data.files && retryResult.data.files[0]?.url) {
                 conditionalLog(
                   contactPhoneNumber,
                   '✅ Arquivo de vídeo encontrado na segunda tentativa!'

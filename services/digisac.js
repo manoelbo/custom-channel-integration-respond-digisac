@@ -451,7 +451,9 @@ class DigiSacApiService {
    * @returns {Object|null} - Dados da mensagem processada para respond.io
    */
   processDigiSacFile(messageData, phoneNumber) {
-    const file = messageData.file;
+    // DigiSac usa campo 'files' (array) em vez de 'file' (objeto)
+    const files = messageData.files;
+    const file = files && Array.isArray(files) && files.length > 0 ? files[0] : null;
 
     // Esta verificação já é feita antes de chamar esta função
     if (!file || !file.url) {
