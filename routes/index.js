@@ -24,7 +24,7 @@ const {
   CHANNEL_API_TOKEN,
 } = require('../services/respond');
 const { cache } = require('../utils/cache');
-const messageCache = require('../utils/messageCache');
+// const messageCache = require('../utils/messageCache'); // REMOVIDO - causava erros
 const retryManager = require('../utils/retryManager');
 
 const router = express.Router();
@@ -727,35 +727,8 @@ router.post('/digisac/webhook', async (req, res) => {
         .json(formatErrorResponse(webhookValidation.error.message, null, 400));
     }
 
-    // ===== VERIFICAÇÃO DE MENSAGEM DUPLICADA =====
-    console.log('\n🔍 VERIFICANDO DUPLICATAS...');
-
-    // Se messageData for um array, usar a primeira mensagem para verificação
-    const messageToCheck = Array.isArray(messageData)
-      ? messageData[0]
-      : messageData;
-
-    if (messageCache && messageCache.isDuplicate(messageToCheck)) {
-      const duplicateProcessingTime = Date.now() - startTime;
-      console.log('⚠️ MENSAGEM DUPLICADA IGNORADA');
-      console.log(`🆔 Webhook ID: ${webhookId}`);
-      console.log(`⏱️ Tempo de processamento: ${duplicateProcessingTime}ms`);
-      console.log('='.repeat(100) + '\n');
-
-      return res.status(200).json(
-        formatSuccessResponse(
-          {
-            webhookId: webhookId,
-            processingTime: duplicateProcessingTime,
-            status: 'ignored',
-            reason: 'Mensagem duplicada',
-          },
-          'Mensagem duplicada ignorada'
-        )
-      );
-    }
-
-    console.log('✅ Mensagem não é duplicata - prosseguindo com processamento');
+    // ===== PROCESSAMENTO DIRETO - SEM VERIFICAÇÃO DE DUPLICATAS =====
+    console.log('\n✅ Prosseguindo com processamento da mensagem');
 
     // Se messageData for um array, pegar apenas a primeira mensagem
     if (Array.isArray(messageData)) {
@@ -1547,15 +1520,8 @@ router.post('/digisac/webhook', async (req, res) => {
       }
     );
 
-    // Marcar mensagem como processada no cache
-    if (messageCache && messageCache.markAsProcessed) {
-      messageCache.markAsProcessed(messageToCheck, {
-        webhookId: webhookId,
-        successCount: successCount,
-        errorCount: errorCount,
-        channelsProcessed: channelConfigs.length,
-      });
-    }
+    // Sistema de cache de duplicatas removido - causava erros
+    // Mensagem processada com sucesso
 
     // Log de sucesso completo
     const totalProcessingTime = Date.now() - startTime;
@@ -1694,7 +1660,6 @@ router.get('/health', (req, res) => {
     },
     metrics: {
       cache: cache.getStats(),
-      messageCache: messageCache.getStats(),
       retryManager: retryManager.getStats(),
     },
     environment: {
@@ -1715,7 +1680,6 @@ router.get('/metrics', (req, res) => {
     service: 'DigiSac ↔ Respond.io Bridge',
     cache: {
       standard: cache.getStats(),
-      messages: messageCache.getStats(),
     },
     retry: retryManager.getStats(),
     system: {
@@ -1735,7 +1699,6 @@ router.get('/metrics', (req, res) => {
  * Endpoint para resetar métricas (útil para debug)
  */
 router.post('/metrics/reset', (req, res) => {
-  messageCache.resetStats();
   retryManager.resetStats();
 
   res.json({
@@ -1747,27 +1710,21 @@ router.post('/metrics/reset', (req, res) => {
 /**
  * Endpoint para ver status das mensagens em cache
  */
-router.get('/cache/messages', (req, res) => {
-  const limit = parseInt(req.query.limit) || 50;
-  const messages = messageCache.listAll().slice(0, limit);
-
+router.get('/cache/standard', (req, res) => {
   res.json({
-    total: messages.length,
-    limit: limit,
-    messages: messages,
-    stats: messageCache.getStats(),
+    cache: cache.getStats(),
     timestamp: new Date().toISOString(),
   });
 });
 
 /**
- * Endpoint para limpar cache de mensagens (útil para debug)
+ * Endpoint para limpar cache padrão (útil para debug)
  */
 router.post('/cache/clear', (req, res) => {
-  messageCache.clear();
+  cache.clear();
 
   res.json({
-    message: 'Cache de mensagens limpo com sucesso',
+    message: 'Cache padrão limpo com sucesso',
     timestamp: new Date().toISOString(),
   });
 });
