@@ -728,17 +728,17 @@ router.post('/digisac/webhook', async (req, res) => {
       : messageData;
 
     if (messageCache && messageCache.isDuplicate(messageToCheck)) {
-      const processingTime = Date.now() - startTime;
+      const duplicateProcessingTime = Date.now() - startTime;
       console.log('⚠️ MENSAGEM DUPLICADA IGNORADA');
       console.log(`🆔 Webhook ID: ${webhookId}`);
-      console.log(`⏱️ Tempo de processamento: ${processingTime}ms`);
+      console.log(`⏱️ Tempo de processamento: ${duplicateProcessingTime}ms`);
       console.log('='.repeat(100) + '\n');
 
       return res.status(200).json(
         formatSuccessResponse(
           {
             webhookId: webhookId,
-            processingTime: processingTime,
+            processingTime: duplicateProcessingTime,
             status: 'ignored',
             reason: 'Mensagem duplicada',
           },
@@ -1142,14 +1142,16 @@ router.post('/digisac/webhook', async (req, res) => {
         console.log(
           `📊 DEBUG - hasFiles: ${hasFiles}, hasFilesUrl: ${hasFilesUrl}, hasFileUrl: ${hasFileUrl}`
         );
-        
+
         // Tentar buscar arquivo via API DigiSac
         try {
-          console.log(`🔍 Buscando arquivo via API para messageId: ${messageId}`);
-          
+          console.log(
+            `🔍 Buscando arquivo via API para messageId: ${messageId}`
+          );
+
           // Aguardar um pouco para o DigiSac processar
           await new Promise((resolve) => setTimeout(resolve, 2000)); // 2 segundos
-          
+
           const result = await retryManager.executeHttpWithRetry(
             () => digiSacApiService.getMessageWithFile(messageId),
             {
@@ -1161,9 +1163,10 @@ router.post('/digisac/webhook', async (req, res) => {
 
           if (result.success && result.data) {
             // Verificar se agora tem arquivo
-            const newHasFilesUrl = result.data.files && result.data.files[0]?.url;
+            const newHasFilesUrl =
+              result.data.files && result.data.files[0]?.url;
             const newHasFileUrl = result.data.file && result.data.file.url;
-            
+
             if (newHasFilesUrl || newHasFileUrl) {
               console.log(`✅ ARQUIVO ENCONTRADO VIA API!`);
               messageData = result.data; // Atualizar dados da mensagem
