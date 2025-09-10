@@ -1108,24 +1108,30 @@ router.post('/digisac/webhook', async (req, res) => {
       console.log(`📸 DEBUG MÍDIA - Tipo: ${messageType}`);
       console.log(`📁 DEBUG MÍDIA - Tem file:`, !!messageData.file);
       console.log(`🔗 DEBUG MÍDIA - Tem URL:`, !!messageData.file?.url);
-      console.log(`📋 DEBUG MÍDIA - Estrutura file:`, JSON.stringify(messageData.file, null, 2));
-      console.log(`📦 DEBUG MÍDIA - messageData completo:`, JSON.stringify(messageData, null, 2));
-      
+      console.log(
+        `📋 DEBUG MÍDIA - Estrutura file:`,
+        JSON.stringify(messageData.file, null, 2)
+      );
+      console.log(
+        `📦 DEBUG MÍDIA - messageData completo:`,
+        JSON.stringify(messageData, null, 2)
+      );
+
       if (!messageData.file || !messageData.file.url) {
         console.log('⚠️ MÍDIA IGNORADA: arquivo ainda não processado');
         conditionalLog(
           contactPhoneNumber,
           '⚠️ Webhook ignorado: arquivo ainda não processado'
         );
-        return res.status(200).json({ 
+        return res.status(200).json({
           status: 'ignored',
           reason: 'Arquivo de mídia ainda não processado',
           messageType: messageType,
           hasFile: !!messageData.file,
-          hasUrl: !!messageData.file?.url
+          hasUrl: !!messageData.file?.url,
         });
       }
-      
+
       console.log(`✅ MÍDIA OK: arquivo disponível - ${messageData.file.url}`);
     }
 
