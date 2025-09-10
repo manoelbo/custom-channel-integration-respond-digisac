@@ -89,10 +89,26 @@ function apiLog(message, data = null) {
   }
 }
 
+/**
+ * Função para logs de debug específicos de user_id (sempre visíveis para debug)
+ * @param {string} phoneNumber - Número de telefone
+ * @param {string} message - Mensagem do log
+ * @param {any} data - Dados adicionais (opcional)
+ */
+function userDebugLog(phoneNumber, message, data = null) {
+  // Sempre logar para debug de user_id
+  if (data) {
+    console.log(`[USER_DEBUG] ${message}`, data);
+  } else {
+    console.log(`[USER_DEBUG] ${message}`);
+  }
+}
+
 module.exports = {
   conditionalLog,
   alwaysLog,
   errorLog,
   debugLog,
   apiLog,
+  userDebugLog,
 };

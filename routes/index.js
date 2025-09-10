@@ -680,8 +680,28 @@ router.post('/digisac/webhook', async (req, res) => {
       });
     }
 
-    // Extrair service_id da mensagem para identificar os canais
+    // Extrair service_id e user_id da mensagem para identificar os canais
     const serviceId = messageData.service_id || messageData.serviceId;
+    const userId = messageData.user_id || messageData.userId;
+
+    // Log detalhado para debug de user_id
+    conditionalLog(from, '🔍 [DEBUG] Dados extraídos do webhook:', {
+      serviceId,
+      userId,
+      messageId,
+      from,
+      messageType,
+      eventType,
+      isFromMe: messageData.isFromMe,
+      hasUserData: !!messageData.user,
+      userData: messageData.user
+        ? {
+            id: messageData.user.id,
+            name: messageData.user.name,
+            username: messageData.user.username,
+          }
+        : null,
+    });
 
     // Buscar TODOS os canais que usam este service_id
     let channelConfigs = [];
@@ -709,6 +729,22 @@ router.post('/digisac/webhook', async (req, res) => {
       }))
     );
 
+    // Log específico para debug de user_id vs canais configurados
+    conditionalLog(
+      from,
+      '🔍 [DEBUG] Comparação user_id da mensagem vs canais configurados:',
+      {
+        messageUserId: userId,
+        configuredUserIds: channelConfigs.map(
+          (config) => config.digisac_user_id
+        ),
+        isMessageFromConfiguredUser: userId
+          ? channelConfigs.some((config) => config.digisac_user_id === userId)
+          : 'N/A',
+        willProcessAllChannels: true, // Sempre processar todos os canais do service_id
+      }
+    );
+
     // Buscar o número de telefone do contato - otimizado para evitar getContactProfile desnecessário
     let contactPhoneNumber = null;
     let contactData = null; // Dados completos do contato
@@ -727,11 +763,14 @@ router.post('/digisac/webhook', async (req, res) => {
 
     // Log adicional para debug do Messaging Echo
     if (isFromMe) {
-      conditionalLog(from, '🔍 Debug Messaging Echo:', {
+      conditionalLog(from, '🔍 [DEBUG] Messaging Echo detalhado:', {
         fromId: messageData.fromId,
         contactId: messageData.contactId,
         contactIdToUse: contactIdToUse,
         isFromMe: messageData.isFromMe,
+        messageUserId: userId,
+        serviceId: serviceId,
+        willProcessForAllChannels: true, // Confirmar que processará para todos os canais
       });
     }
 
@@ -1124,6 +1163,10 @@ router.post('/digisac/webhook', async (req, res) => {
               vendedor: channelConfig.desc,
               contactId: contactPhoneNumber,
               texto: processedMessage.text,
+              messageUserId: userId,
+              channelUserId: channelConfig.digisac_user_id,
+              isFromDifferentUser: userId !== channelConfig.digisac_user_id,
+              willSendAnyway: true, // Sempre enviar independente do user_id
             }
           );
 
@@ -1146,6 +1189,10 @@ router.post('/digisac/webhook', async (req, res) => {
               vendedor: channelConfig.desc,
               contactId: contactPhoneNumber,
               texto: processedMessage.text,
+              messageUserId: userId,
+              channelUserId: channelConfig.digisac_user_id,
+              isFromDifferentUser: userId !== channelConfig.digisac_user_id,
+              willSendAnyway: true, // Sempre enviar independente do user_id
             }
           );
 
