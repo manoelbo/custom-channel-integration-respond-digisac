@@ -1674,31 +1674,30 @@ router.all('*', (req, res) => {
 router.get('/debug/channels/:serviceId', async (req, res) => {
   try {
     const serviceId = req.params.serviceId;
-    
+
     console.log(`🔍 DEBUG: Buscando canais para serviceId: ${serviceId}`);
-    
+
     // Limpar cache para este serviceId
     const cacheKey = `channels:${serviceId}`;
     cache.delete(cacheKey);
-    
+
     // Buscar canais
     const channels = await getChannelsByServiceId(serviceId);
-    
+
     console.log(`📊 DEBUG: Encontrados ${channels.length} canais`);
     console.log(`📋 DEBUG: Canais:`, JSON.stringify(channels, null, 2));
-    
+
     res.json({
       serviceId: serviceId,
       channelsFound: channels.length,
       channels: channels,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-    
   } catch (error) {
     console.error(`❌ DEBUG: Erro ao buscar canais:`, error);
     res.status(500).json({
       error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 });
@@ -1709,28 +1708,27 @@ router.get('/debug/channels/:serviceId', async (req, res) => {
 router.get('/debug/refera', async (req, res) => {
   try {
     console.log(`🔍 DEBUG: Testando API Refera diretamente`);
-    
+
     const result = await referaApiService.callMessageTool();
-    
+
     console.log(`📊 DEBUG: Resposta da API Refera:`, {
       success: result.success,
       dataExists: !!result.data,
-      resultsLength: result.data?.results?.length || 0
+      resultsLength: result.data?.results?.length || 0,
     });
-    
+
     res.json({
       success: result.success,
       dataExists: !!result.data,
       resultsLength: result.data?.results?.length || 0,
       firstFewResults: result.data?.results?.slice(0, 3) || [],
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-    
   } catch (error) {
     console.error(`❌ DEBUG: Erro na API Refera:`, error);
     res.status(500).json({
       error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 });
