@@ -719,6 +719,14 @@ router.post('/digisac/webhook', async (req, res) => {
       );
     }
 
+    // Validar dados do webhook
+    const webhookValidation = validateDigiSacWebhook(req.body);
+    if (!webhookValidation.success) {
+      return res
+        .status(400)
+        .json(formatErrorResponse(webhookValidation.error.message, null, 400));
+    }
+
     // ===== VERIFICAÇÃO DE MENSAGEM DUPLICADA =====
     console.log('\n🔍 VERIFICANDO DUPLICATAS...');
 
@@ -748,14 +756,6 @@ router.post('/digisac/webhook', async (req, res) => {
     }
 
     console.log('✅ Mensagem não é duplicata - prosseguindo com processamento');
-
-    // Validar dados do webhook
-    const webhookValidation = validateDigiSacWebhook(req.body);
-    if (!webhookValidation.success) {
-      return res
-        .status(400)
-        .json(formatErrorResponse(webhookValidation.error.message, null, 400));
-    }
 
     // Se messageData for um array, pegar apenas a primeira mensagem
     if (Array.isArray(messageData)) {
