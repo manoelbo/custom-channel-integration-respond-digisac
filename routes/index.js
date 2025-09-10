@@ -22,10 +22,10 @@ const { digiSacApiService } = require('../services/digisac');
 const {
   respondIoApiService,
   CHANNEL_API_TOKEN,
-  } = require('../services/respond');
-  const { cache } = require('../utils/cache');
-  const messageCache = require('../utils/messageCache');
-  const retryManager = require('../utils/retryManager');
+} = require('../services/respond');
+const { cache } = require('../utils/cache');
+const messageCache = require('../utils/messageCache');
+const retryManager = require('../utils/retryManager');
 
 const router = express.Router();
 
@@ -633,75 +633,121 @@ router.post('/:channelID/message', async (req, res) => {
  * Rota para recebimento de mensagens: FROM DigiSac TO respond.io
  * Endpoint: POST /digisac/webhook
  */
-  router.post('/digisac/webhook', async (req, res) => {
-    const startTime = Date.now();
-    const webhookId = `webhook_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    try {
-      // ===== LOG COMPLETO DO WEBHOOK RECEBIDO =====
-      console.log('\n' + '='.repeat(100));
-      console.log(`🔔 WEBHOOK DIGISAC RECEBIDO - ${new Date().toISOString()}`);
+router.post('/digisac/webhook', async (req, res) => {
+  const startTime = Date.now();
+  const webhookId = `webhook_${Date.now()}_${Math.random()
+    .toString(36)
+    .substr(2, 9)}`;
+
+  try {
+    // ===== LOG COMPLETO DO WEBHOOK RECEBIDO =====
+    console.log('\n' + '='.repeat(100));
+    console.log(`🔔 WEBHOOK DIGISAC RECEBIDO - ${new Date().toISOString()}`);
+    console.log(`🆔 Webhook ID: ${webhookId}`);
+    console.log('='.repeat(100));
+
+    // Log dos headers importantes
+    console.log('📋 HEADERS IMPORTANTES:');
+    console.log(`Content-Type: ${req.headers['content-type']}`);
+    console.log(`Content-Length: ${req.headers['content-length']}`);
+    console.log(`User-Agent: ${req.headers['user-agent']}`);
+    console.log(`X-Forwarded-For: ${req.headers['x-forwarded-for'] || 'N/A'}`);
+    console.log(
+      `Authorization: ${req.headers['authorization'] ? 'Present' : 'Missing'}`
+    );
+
+    // Log do body completo
+    console.log('\n📦 BODY COMPLETO:');
+    console.log(JSON.stringify(req.body, null, 2));
+
+    // Verificar se é um evento de mensagem relevante
+    const eventType = req.body.event;
+    let messageData = req.body.data;
+
+    // Log resumido para facilitar análise
+    console.log('\n📋 RESUMO DO WEBHOOK:');
+    console.log(`🎯 Event Type: ${eventType}`);
+    console.log(
+      `📱 Message ID: ${
+        messageData?.id || messageData?.messageId || messageData?._id || 'N/A'
+      }`
+    );
+    console.log(
+      `📞 From: ${
+        messageData?.from ||
+        messageData?.fromId ||
+        messageData?.contactId ||
+        messageData?.number ||
+        'N/A'
+      }`
+    );
+    console.log(
+      `💬 Message: ${
+        messageData?.message ||
+        messageData?.text ||
+        messageData?.content ||
+        'N/A'
+      }`
+    );
+    console.log(
+      `👤 User ID: ${messageData?.user_id || messageData?.userId || 'N/A'}`
+    );
+    console.log(
+      `🏢 Service ID: ${
+        messageData?.service_id || messageData?.serviceId || 'N/A'
+      }`
+    );
+    console.log(
+      `📝 Message Type: ${
+        messageData?.type || messageData?.messageType || 'N/A'
+      }`
+    );
+    console.log(`🔄 Is From Me: ${messageData?.isFromMe || false}`);
+    console.log(`⏰ Timestamp: ${messageData?.timestamp || 'N/A'}`);
+
+    // Log adicional para debug de estrutura
+    if (Array.isArray(messageData)) {
+      console.log(`📊 Message Data é array com ${messageData.length} itens`);
+    } else if (typeof messageData === 'object') {
+      console.log(
+        `📊 Message Data é objeto com ${
+          Object.keys(messageData || {}).length
+        } propriedades`
+      );
+      console.log(
+        `📊 Propriedades: ${Object.keys(messageData || {}).join(', ')}`
+      );
+    }
+
+    // ===== VERIFICAÇÃO DE MENSAGEM DUPLICADA =====
+    console.log('\n🔍 VERIFICANDO DUPLICATAS...');
+
+    // Se messageData for um array, usar a primeira mensagem para verificação
+    const messageToCheck = Array.isArray(messageData)
+      ? messageData[0]
+      : messageData;
+
+    if (messageCache.isDuplicate(messageToCheck)) {
+      const processingTime = Date.now() - startTime;
+      console.log('⚠️ MENSAGEM DUPLICADA IGNORADA');
       console.log(`🆔 Webhook ID: ${webhookId}`);
-      console.log('='.repeat(100));
-      
-      // Log dos headers importantes
-      console.log('📋 HEADERS IMPORTANTES:');
-      console.log(`Content-Type: ${req.headers['content-type']}`);
-      console.log(`Content-Length: ${req.headers['content-length']}`);
-      console.log(`User-Agent: ${req.headers['user-agent']}`);
-      console.log(`X-Forwarded-For: ${req.headers['x-forwarded-for'] || 'N/A'}`);
-      console.log(`Authorization: ${req.headers['authorization'] ? 'Present' : 'Missing'}`);
-      
-      // Log do body completo
-      console.log('\n📦 BODY COMPLETO:');
-      console.log(JSON.stringify(req.body, null, 2));
-      
-      // Verificar se é um evento de mensagem relevante
-      const eventType = req.body.event;
-      let messageData = req.body.data;
-      
-      // Log resumido para facilitar análise
-      console.log('\n📋 RESUMO DO WEBHOOK:');
-      console.log(`🎯 Event Type: ${eventType}`);
-      console.log(`📱 Message ID: ${messageData?.id || messageData?.messageId || messageData?._id || 'N/A'}`);
-      console.log(`📞 From: ${messageData?.from || messageData?.fromId || messageData?.contactId || messageData?.number || 'N/A'}`);
-      console.log(`💬 Message: ${messageData?.message || messageData?.text || messageData?.content || 'N/A'}`);
-      console.log(`👤 User ID: ${messageData?.user_id || messageData?.userId || 'N/A'}`);
-      console.log(`🏢 Service ID: ${messageData?.service_id || messageData?.serviceId || 'N/A'}`);
-      console.log(`📝 Message Type: ${messageData?.type || messageData?.messageType || 'N/A'}`);
-      console.log(`🔄 Is From Me: ${messageData?.isFromMe || false}`);
-      console.log(`⏰ Timestamp: ${messageData?.timestamp || 'N/A'}`);
-      
-      // Log adicional para debug de estrutura
-      if (Array.isArray(messageData)) {
-        console.log(`📊 Message Data é array com ${messageData.length} itens`);
-      } else if (typeof messageData === 'object') {
-        console.log(`📊 Message Data é objeto com ${Object.keys(messageData || {}).length} propriedades`);
-        console.log(`📊 Propriedades: ${Object.keys(messageData || {}).join(', ')}`);
-      }
-      
-      // ===== VERIFICAÇÃO DE MENSAGEM DUPLICADA =====
-      console.log('\n🔍 VERIFICANDO DUPLICATAS...');
-      
-      // Se messageData for um array, usar a primeira mensagem para verificação
-      const messageToCheck = Array.isArray(messageData) ? messageData[0] : messageData;
-      
-      if (messageCache.isDuplicate(messageToCheck)) {
-        const processingTime = Date.now() - startTime;
-        console.log('⚠️ MENSAGEM DUPLICADA IGNORADA');
-        console.log(`🆔 Webhook ID: ${webhookId}`);
-        console.log(`⏱️ Tempo de processamento: ${processingTime}ms`);
-        console.log('='.repeat(100) + '\n');
-        
-        return res.status(200).json(formatSuccessResponse({
-          webhookId: webhookId,
-          processingTime: processingTime,
-          status: 'ignored',
-          reason: 'Mensagem duplicada'
-        }, 'Mensagem duplicada ignorada'));
-      }
-      
-      console.log('✅ Mensagem não é duplicata - prosseguindo com processamento');
+      console.log(`⏱️ Tempo de processamento: ${processingTime}ms`);
+      console.log('='.repeat(100) + '\n');
+
+      return res.status(200).json(
+        formatSuccessResponse(
+          {
+            webhookId: webhookId,
+            processingTime: processingTime,
+            status: 'ignored',
+            reason: 'Mensagem duplicada',
+          },
+          'Mensagem duplicada ignorada'
+        )
+      );
+    }
+
+    console.log('✅ Mensagem não é duplicata - prosseguindo com processamento');
 
     // Validar dados do webhook
     const webhookValidation = validateDigiSacWebhook(req.body);
@@ -913,22 +959,22 @@ router.post('/:channelID/message', async (req, res) => {
           contactData.contactId ||
           contactIdToUse;
       } else {
-         try {
-           conditionalLog(
-             from,
-             '🔍 Buscando dados do contato na API:',
-             contactIdToUse
-           );
-           
-           // Usar retry para busca de contato
-           const contactResult = await retryManager.executeHttpWithRetry(
-             () => digiSacApiService.getContactProfile(contactIdToUse),
-             {
-               operation: 'Buscar dados do contato DigiSac',
-               webhookId: webhookId,
-               contactId: contactIdToUse
-             }
-           );
+        try {
+          conditionalLog(
+            from,
+            '🔍 Buscando dados do contato na API:',
+            contactIdToUse
+          );
+
+          // Usar retry para busca de contato
+          const contactResult = await retryManager.executeHttpWithRetry(
+            () => digiSacApiService.getContactProfile(contactIdToUse),
+            {
+              operation: 'Buscar dados do contato DigiSac',
+              webhookId: webhookId,
+              contactId: contactIdToUse,
+            }
+          );
           if (contactResult.success && contactResult.data) {
             // Armazenar dados completos do contato
             contactData = contactResult.data;
@@ -1080,16 +1126,16 @@ router.post('/:channelID/message', async (req, res) => {
       // Timeout reduzido: 1 segundo em vez de 3
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-         try {
-         // Buscar mensagem com arquivo incluído usando retry
-         const result = await retryManager.executeHttpWithRetry(
-           () => digiSacApiService.getMessageWithFile(messageId),
-           {
-             operation: 'Buscar arquivo de vídeo DigiSac (tentativa 1)',
-             webhookId: webhookId,
-             messageId: messageId
-           }
-         );
+      try {
+        // Buscar mensagem com arquivo incluído usando retry
+        const result = await retryManager.executeHttpWithRetry(
+          () => digiSacApiService.getMessageWithFile(messageId),
+          {
+            operation: 'Buscar arquivo de vídeo DigiSac (tentativa 1)',
+            webhookId: webhookId,
+            messageId: messageId,
+          }
+        );
 
         if (result.success && result.data) {
           conditionalLog(
@@ -1116,14 +1162,14 @@ router.post('/:channelID/message', async (req, res) => {
             // Segunda tentativa com timeout reduzido: 1 segundo em vez de 5
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
-             const retryResult = await retryManager.executeHttpWithRetry(
-               () => digiSacApiService.getMessageWithFile(messageId),
-               {
-                 operation: 'Buscar arquivo de vídeo DigiSac (tentativa 2)',
-                 webhookId: webhookId,
-                 messageId: messageId
-               }
-             );
+            const retryResult = await retryManager.executeHttpWithRetry(
+              () => digiSacApiService.getMessageWithFile(messageId),
+              {
+                operation: 'Buscar arquivo de vídeo DigiSac (tentativa 2)',
+                webhookId: webhookId,
+                messageId: messageId,
+              }
+            );
             if (retryResult.success && retryResult.data) {
               conditionalLog(
                 contactPhoneNumber,
@@ -1255,24 +1301,25 @@ router.post('/:channelID/message', async (req, res) => {
             }
           );
 
-           // Para Messaging Echoes, usar os dados do contato que já foram buscados anteriormente
-           respondResult = await retryManager.executeHttpWithRetry(
-             () => sendMessageWithChannelToken(
-               channelRespondService,
-               processedMessage,
-               messageId,
-               contactPhoneNumber,
-               timestamp,
-               contactData, // Incluir dados completos do contato
-               true
-             ),
-             {
-               operation: 'Enviar Messaging Echo para respond.io',
-               webhookId: webhookId,
-               channelId: channelConfig.custom_channel_id,
-               vendedor: channelConfig.desc
-             }
-           );
+          // Para Messaging Echoes, usar os dados do contato que já foram buscados anteriormente
+          respondResult = await retryManager.executeHttpWithRetry(
+            () =>
+              sendMessageWithChannelToken(
+                channelRespondService,
+                processedMessage,
+                messageId,
+                contactPhoneNumber,
+                timestamp,
+                contactData, // Incluir dados completos do contato
+                true
+              ),
+            {
+              operation: 'Enviar Messaging Echo para respond.io',
+              webhookId: webhookId,
+              channelId: channelConfig.custom_channel_id,
+              vendedor: channelConfig.desc,
+            }
+          );
         } else {
           conditionalLog(
             contactPhoneNumber,
@@ -1289,23 +1336,24 @@ router.post('/:channelID/message', async (req, res) => {
             }
           );
 
-           respondResult = await retryManager.executeHttpWithRetry(
-             () => sendMessageWithChannelToken(
-               channelRespondService,
-               processedMessage,
-               messageId,
-               contactPhoneNumber,
-               timestamp,
-               contactData, // Incluir dados completos do contato
-               false
-             ),
-             {
-               operation: 'Enviar mensagem DigiSac para respond.io',
-               webhookId: webhookId,
-               channelId: channelConfig.custom_channel_id,
-               vendedor: channelConfig.desc
-             }
-           );
+          respondResult = await retryManager.executeHttpWithRetry(
+            () =>
+              sendMessageWithChannelToken(
+                channelRespondService,
+                processedMessage,
+                messageId,
+                contactPhoneNumber,
+                timestamp,
+                contactData, // Incluir dados completos do contato
+                false
+              ),
+            {
+              operation: 'Enviar mensagem DigiSac para respond.io',
+              webhookId: webhookId,
+              channelId: channelConfig.custom_channel_id,
+              vendedor: channelConfig.desc,
+            }
+          );
         }
 
         // Retornar resultado para este canal
@@ -1379,60 +1427,65 @@ router.post('/:channelID/message', async (req, res) => {
         tempoProcessamento: `${processingTime}ms`,
         messageId: messageId,
         isFromMe: isFromMe,
-       }
-     );
+      }
+    );
 
-     // Marcar mensagem como processada no cache
-     messageCache.markAsProcessed(messageToCheck, {
-       webhookId: webhookId,
-       successCount: successCount,
-       errorCount: errorCount,
-       channelsProcessed: channelConfigs.length
-     });
+    // Marcar mensagem como processada no cache
+    messageCache.markAsProcessed(messageToCheck, {
+      webhookId: webhookId,
+      successCount: successCount,
+      errorCount: errorCount,
+      channelsProcessed: channelConfigs.length,
+    });
 
-     // Log de sucesso completo
-     const totalProcessingTime = Date.now() - startTime;
-     console.log('\n✅ WEBHOOK PROCESSADO COM SUCESSO');
-     console.log(`🆔 Webhook ID: ${webhookId}`);
-     console.log(`⏱️ Tempo de processamento: ${totalProcessingTime}ms`);
-     console.log(`📨 Canais processados: ${successCount}/${channelConfigs.length}`);
-     console.log(`✅ Sucessos: ${successCount}`);
-     console.log(`❌ Erros: ${errorCount}`);
-     console.log('='.repeat(100) + '\n');
+    // Log de sucesso completo
+    const totalProcessingTime = Date.now() - startTime;
+    console.log('\n✅ WEBHOOK PROCESSADO COM SUCESSO');
+    console.log(`🆔 Webhook ID: ${webhookId}`);
+    console.log(`⏱️ Tempo de processamento: ${totalProcessingTime}ms`);
+    console.log(
+      `📨 Canais processados: ${successCount}/${channelConfigs.length}`
+    );
+    console.log(`✅ Sucessos: ${successCount}`);
+    console.log(`❌ Erros: ${errorCount}`);
+    console.log('='.repeat(100) + '\n');
 
-     // Responder ao DigiSac que recebemos o webhook
-     res
-       .status(200)
-       .json(formatSuccessResponse({
-         webhookId: webhookId,
-         processingTime: totalProcessingTime,
-         channelsProcessed: channelConfigs.length,
-         successCount: successCount,
-         errorCount: errorCount
-       }, 'Webhook processado com sucesso'));
-   } catch (error) {
-     const errorProcessingTime = Date.now() - startTime;
-     
-     // Log de erro completo
-     console.error('\n❌ ERRO CRÍTICO NO WEBHOOK');
-     console.error(`🆔 Webhook ID: ${webhookId}`);
-     console.error(`⏱️ Tempo até erro: ${errorProcessingTime}ms`);
-     console.error(`🔥 Erro: ${error.message}`);
-     console.error(`📍 Stack trace:`);
-     console.error(error.stack);
-     console.error(`📦 Body recebido:`);
-     console.error(JSON.stringify(req.body, null, 2));
-     console.error('='.repeat(100) + '\n');
+    // Responder ao DigiSac que recebemos o webhook
+    res.status(200).json(
+      formatSuccessResponse(
+        {
+          webhookId: webhookId,
+          processingTime: totalProcessingTime,
+          channelsProcessed: channelConfigs.length,
+          successCount: successCount,
+          errorCount: errorCount,
+        },
+        'Webhook processado com sucesso'
+      )
+    );
+  } catch (error) {
+    const errorProcessingTime = Date.now() - startTime;
 
-     errorLog('❌ Erro no webhook DigiSac:', error);
+    // Log de erro completo
+    console.error('\n❌ ERRO CRÍTICO NO WEBHOOK');
+    console.error(`🆔 Webhook ID: ${webhookId}`);
+    console.error(`⏱️ Tempo até erro: ${errorProcessingTime}ms`);
+    console.error(`🔥 Erro: ${error.message}`);
+    console.error(`📍 Stack trace:`);
+    console.error(error.stack);
+    console.error(`📦 Body recebido:`);
+    console.error(JSON.stringify(req.body, null, 2));
+    console.error('='.repeat(100) + '\n');
 
-     // Mesmo com erro, responder 200 ao DigiSac para evitar reenvios
-     res
-       .status(200)
-       .json(
-         formatErrorResponse('Erro ao processar webhook', error.message, 500)
-       );
-   }
+    errorLog('❌ Erro no webhook DigiSac:', error);
+
+    // Mesmo com erro, responder 200 ao DigiSac para evitar reenvios
+    res
+      .status(200)
+      .json(
+        formatErrorResponse('Erro ao processar webhook', error.message, 500)
+      );
+  }
 });
 
 /**
@@ -1495,7 +1548,7 @@ router.get('/message/:messageId/status', async (req, res) => {
 router.get('/health', (req, res) => {
   const uptime = process.uptime();
   const memory = process.memoryUsage();
-  
+
   res.json({
     status: 'healthy',
     service: 'DigiSac ↔ Respond.io Bridge',
@@ -1503,13 +1556,15 @@ router.get('/health', (req, res) => {
     version: '1.0.0',
     uptime: {
       seconds: Math.round(uptime),
-      human: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`
+      human: `${Math.floor(uptime / 3600)}h ${Math.floor(
+        (uptime % 3600) / 60
+      )}m ${Math.floor(uptime % 60)}s`,
     },
     memory: {
       used: Math.round(memory.heapUsed / 1024 / 1024),
       total: Math.round(memory.heapTotal / 1024 / 1024),
       external: Math.round(memory.external / 1024 / 1024),
-      rss: Math.round(memory.rss / 1024 / 1024)
+      rss: Math.round(memory.rss / 1024 / 1024),
     },
     config: {
       digiSac: digiSacApiService.getConfigInfo
@@ -1521,14 +1576,14 @@ router.get('/health', (req, res) => {
     metrics: {
       cache: cache.getStats(),
       messageCache: messageCache.getStats(),
-      retryManager: retryManager.getStats()
+      retryManager: retryManager.getStats(),
     },
     environment: {
       node: process.version,
       platform: process.platform,
       arch: process.arch,
-      env: process.env.NODE_ENV || 'development'
-    }
+      env: process.env.NODE_ENV || 'development',
+    },
   });
 });
 
@@ -1541,7 +1596,7 @@ router.get('/metrics', (req, res) => {
     service: 'DigiSac ↔ Respond.io Bridge',
     cache: {
       standard: cache.getStats(),
-      messages: messageCache.getStats()
+      messages: messageCache.getStats(),
     },
     retry: retryManager.getStats(),
     system: {
@@ -1551,9 +1606,9 @@ router.get('/metrics', (req, res) => {
       platform: {
         node: process.version,
         os: process.platform,
-        arch: process.arch
-      }
-    }
+        arch: process.arch,
+      },
+    },
   });
 });
 
@@ -1563,10 +1618,10 @@ router.get('/metrics', (req, res) => {
 router.post('/metrics/reset', (req, res) => {
   messageCache.resetStats();
   retryManager.resetStats();
-  
+
   res.json({
     message: 'Métricas resetadas com sucesso',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -1576,13 +1631,13 @@ router.post('/metrics/reset', (req, res) => {
 router.get('/cache/messages', (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const messages = messageCache.listAll().slice(0, limit);
-  
+
   res.json({
     total: messages.length,
     limit: limit,
     messages: messages,
     stats: messageCache.getStats(),
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -1591,10 +1646,10 @@ router.get('/cache/messages', (req, res) => {
  */
 router.post('/cache/clear', (req, res) => {
   messageCache.clear();
-  
+
   res.json({
     message: 'Cache de mensagens limpo com sucesso',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
