@@ -149,18 +149,20 @@ function formatMessageForRespondIo(
   const maintenancePhrases = [
     'Sou da área de manutenção',
     'responsável pelas manutenções',
-    'Somos responsáveis pelas manutenções'
+    'Somos responsáveis pelas manutenções',
   ];
-  
-  const isMaintenanceMessage = isFromMe && messageData.text && 
-    maintenancePhrases.some(phrase => 
+
+  const isMaintenanceMessage =
+    isFromMe &&
+    messageData.text &&
+    maintenancePhrases.some((phrase) =>
       messageData.text.toLowerCase().includes(phrase.toLowerCase())
     );
 
   // Para Messaging Echoes, determinar tipo e processar texto
   let processedMessageData = { ...messageData };
   let messageType = 'message_echo'; // Comportamento padrão original
-  
+
   if (isFromMe && messageData.text) {
     if (isMaintenanceMessage) {
       // Exceção: mensagens de manutenção como mensagem normal com prefixo
