@@ -145,15 +145,23 @@ function formatMessageForRespondIo(
     }
   }
 
+  // Para Messaging Echoes, adicionar prefixo especial no texto
+  let processedMessageData = { ...messageData };
+  
+  if (isFromMe && messageData.text) {
+    // Adicionar prefixo especial para mensagens enviadas pelo vendedor/automação
+    processedMessageData.text = `**Mensagem Enviada Por Outro Dispositivo (Digisac, WhatsApp Business), pelo vendedor ou automação:**\n\n${messageData.text}`;
+  }
+
   return {
     channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
     contactId: formattedContactId,
     events: [
       {
-        type: isFromMe ? 'message_echo' : 'message',
+        type: 'message', // Sempre usar 'message' em vez de 'message_echo'
         mId: messageId,
         timestamp: formatTimestamp(timestamp),
-        message: messageData,
+        message: processedMessageData,
       },
     ],
   };
