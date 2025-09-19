@@ -145,12 +145,29 @@ function formatMessageForRespondIo(
     }
   }
 
-  // Para Messaging Echoes, adicionar prefixo especial no texto
-  let processedMessageData = { ...messageData };
+  // Determinar se é uma mensagem de manutenção (exceção para Echo)
+  const maintenancePhrases = [
+    'Sou da área de manutenção',
+    'responsável pelas manutenções',
+    'Somos responsáveis pelas manutenções'
+  ];
+  
+  const isMaintenanceMessage = isFromMe && messageData.text && 
+    maintenancePhrases.some(phrase => 
+      messageData.text.toLowerCase().includes(phrase.toLowerCase())
+    );
 
+  // Para Messaging Echoes, determinar tipo e processar texto
+  let processedMessageData = { ...messageData };
+  let messageType = 'message_echo'; // Comportamento padrão original
+  
   if (isFromMe && messageData.text) {
-    // Adicionar prefixo especial para mensagens enviadas pelo vendedor/automação
-    processedMessageData.text = `**Mensagem Enviada Por Outro Dispositivo (Digisac, WhatsApp Business), pelo vendedor ou automação:**\n\n${messageData.text}`;
+    if (isMaintenanceMessage) {
+      // Exceção: mensagens de manutenção como mensagem normal com prefixo
+      messageType = 'message';
+      processedMessageData.text = `**Mensagem Enviada Por Outro Dispositivo (Digisac, WhatsApp Business), pelo vendedor ou automação:**\n\n${messageData.text}`;
+    }
+    // Se não for mensagem de manutenção, manter como message_echo (comportamento original)
   }
 
   return {
@@ -158,7 +175,7 @@ function formatMessageForRespondIo(
     contactId: formattedContactId,
     events: [
       {
-        type: 'message', // Sempre usar 'message' em vez de 'message_echo'
+        type: messageType, // 'message_echo' para echos normais, 'message' para manutenção
         mId: messageId,
         timestamp: formatTimestamp(timestamp),
         message: processedMessageData,
