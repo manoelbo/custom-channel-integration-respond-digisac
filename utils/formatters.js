@@ -147,7 +147,7 @@ function formatMessageForRespondIo(
 
   // Para Messaging Echoes, adicionar prefixo especial no texto
   let processedMessageData = { ...messageData };
-  
+
   if (isFromMe && messageData.text) {
     // Adicionar prefixo especial para mensagens enviadas pelo vendedor/automação
     processedMessageData.text = `**Mensagem Enviada Por Outro Dispositivo (Digisac, WhatsApp Business), pelo vendedor ou automação:**\n\n${messageData.text}`;
