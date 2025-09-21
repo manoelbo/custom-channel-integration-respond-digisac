@@ -161,16 +161,19 @@ function formatMessageForRespondIo(
 
   // Para Messaging Echoes, determinar tipo e processar texto
   let processedMessageData = { ...messageData };
-  let messageType = 'message_echo'; // Comportamento padrão original
+  let messageType = 'message'; // Padrão: mensagens normais do usuário
 
   if (isFromMe && messageData.text) {
     if (isMaintenanceMessage) {
       // Exceção: mensagens de manutenção como mensagem normal com prefixo
       messageType = 'message';
       processedMessageData.text = `**Mensagem Enviada Por Outro Dispositivo (Digisac, WhatsApp Business), pelo vendedor ou automação:**\n\n${messageData.text}`;
+    } else {
+      // Mensagens suas (não de manutenção) como message_echo
+      messageType = 'message_echo';
     }
-    // Se não for mensagem de manutenção, manter como message_echo (comportamento original)
   }
+  // Se não for isFromMe (mensagem do usuário), manter como 'message' (padrão)
 
   return {
     channelId: process.env.RESPOND_IO_CHANNEL_ID || 'digisac_channel_001',
